@@ -1,0 +1,4 @@
+name = "imbp"
+uuid = "b21e04bd-522c-4859-b3c3-0938792aa507"
+authors = ["Ilia Luchnikov <luchnikovilya@gmail.com>"]
+version = "0.1.0"
