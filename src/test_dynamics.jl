@@ -1,9 +1,10 @@
 using LinearAlgebra
 using TensorOperations
+using Plots
 include("IMBP.jl")
 
 # gates initialization
-theta = 1.
+theta = 0.9
 x = (-im * theta / 2) * reshape(ComplexF64[0, 1, 1, 0], 2, 2)
 x_gate = exp(x)
 zz_gate = reshape(Diagonal(exp.((pi * im / 4) * ComplexF64[1, -1, -1, 1])), 2, 2, 2, 2)
@@ -26,3 +27,10 @@ IMBP.add_gate!(lattice_cell, 1, 5, zz_gate)
 equations = IMBP.get_equations(lattice_cell)
 ims = IMBP.initialize_ims_by_perfect_dissipators(IMBP.IM{ComplexF64}, lattice_cell, 50)
 IMBP.iterate_equations!(equations, ims, 10, 100, -1e-8)
+dens_dyn = IMBP.simulate_dynamics(
+    equations.marginal_eqs[2],
+    ims,
+    reshape(ComplexF64[1, 0, 0, 0], (2, 2))
+)
+z_dyn = real(map(x -> x[1, 1] - x[2, 2], dens_dyn))
+plot(z_dyn, ylim = (0, 1))

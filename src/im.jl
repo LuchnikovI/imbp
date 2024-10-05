@@ -243,10 +243,94 @@ function get_bond_dimensions(im::IM)
     bond_dims_vec
 end
 
+function _fwd_evolution(
+    state::Array{N, 2},
+    ker::Array{N, 4},
+) where {N<:Number}
+    ker_shape = size(ker)
+    state_shape = size(state)
+    resh_state = reshape(state, (ker_shape[1], :, state_shape[2]))
+    @tensor new_state[j, m, l] := resh_state[i, j, k] * ker[i, k, l, m]
+    new_state = reshape(new_state, (:, ker_shape[3]))
+    normalize!(new_state)
+    new_state
+end
+
+function _fwd_evolution(
+    state::Array{N, 2},
+    equation::Equation,
+    time_step::Int64,
+    ims::Dict{IMID, IM{N}},
+) where {N<:Number}
+    for id in equation
+        @assert isa(id, IMID)
+        ker = ims[id].kernels[time_step]
+        state = _fwd_evolution(state, ker)
+    end
+    state
+end
+
+function _bwd_evolution(
+    state::Vector{N},
+    ker::Array{N, 4},
+) where {N<:Number}
+    ker_shape = size(ker)
+    sqrt_inp_tr_dim = round(Int64, sqrt(ker_shape[2]))
+    @assert sqrt_inp_tr_dim * sqrt_inp_tr_dim == ker_shape[2]
+    sqrt_out_tr_dim = round(Int64, sqrt(ker_shape[3]))
+    @assert sqrt_out_tr_dim * sqrt_out_tr_dim == ker_shape[3]
+    inp_tr = reshape(Matrix{N}(I, sqrt_inp_tr_dim, sqrt_inp_tr_dim), (:,))
+    out_tr = reshape(Matrix{N}(I, sqrt_out_tr_dim, sqrt_out_tr_dim), (:,))
+    @tensor reduced_ker[i, l] := ker[i, j, k, l] * inp_tr[j] * out_tr[k]
+    resh_state = reshape(state, (:, ker_shape[4]))
+    @tensor new_state[i, k] := reduced_ker[i, j] * resh_state[k, j]
+    new_state = reshape(new_state, (:,))
+    normalize!(new_state)
+    new_state
+end
+
+function _bwd_evolution(
+    state::Vector{N},
+    equation::Equation,
+    time_step::Int64,
+    ims::Dict{IMID, IM{N}},
+) where {N<:Number}
+    for id in reverse(equation)
+        @assert isa(id, IMID)
+        ker = ims[id].kernels[time_step]
+        state = _bwd_evolution(state, ker)
+    end
+    state
+end
+
+function _get_dens(lhs_state::Array{N, 2}, rhs_state::Vector{N}) where {N<:Number}
+    @tensor dens[j] := lhs_state[i, j] * rhs_state[i]
+    sqrt_dim = round(Int64, sqrt(length(dens)))
+    @assert sqrt_dim * sqrt_dim == length(dens)
+    dens = reshape(dens, (sqrt_dim, sqrt_dim))
+    dens /= tr(dens)
+    dens
+end
+
 function simulate_dynamics(
     equation::Equation,
-    ims::Dict{IMID, I},
+    ims::Dict{IMID, IM{N}},
     initial_state::Array{N, 2},
 ) where {N<:Number}
-    error("Not Yet Implemented")
+    time_steps = get_time_steps_number(ims)
+    rhs_state = N[one(N)]
+    rhs_states = Vector{N}[]
+    for time_step in reverse(1:time_steps)
+        rhs_state = _bwd_evolution(rhs_state, equation, time_step, ims)
+        push!(rhs_states, rhs_state)
+    end
+    reverse!(rhs_states)
+    lhs_state = reshape(initial_state, (1, :))
+    dynamics = Array{N, 2}[]
+    for (time_step, rhs_state) in enumerate(rhs_states)
+        push!(dynamics, _get_dens(lhs_state, rhs_state))
+        lhs_state = _fwd_evolution(lhs_state, equation, time_step, ims)
+    end
+    #TODO: add the last state
+    dynamics
 end
