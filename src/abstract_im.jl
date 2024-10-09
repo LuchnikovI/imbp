@@ -9,8 +9,9 @@ contract(
     equation::Equation,
     ims::Dict{IMID, I},
     kernels::Dict{KernelID, A},
-    initial_states::Vector{A},
-) where {I<:AbstractIM, A<:AbstractArray} = error("Not Yet Implemented")
+    one_qubit_gate::Matrix{N},
+    initial_state::Vector{N},
+) where {N<:Number, I<:AbstractIM} = error("Not Yet Implemented")
 
 log_fidelity(lhs::AbstractIM, rhs::AbstractIM) = error("Not Yet Implemented")
 
@@ -21,7 +22,8 @@ get_time_steps_number(im::AbstractIM) = error("Not Yet Implemented")
 simulate_dynamics(
     equation::Equation,
     ims::Dict{IMID, I},
-    initial_state::Array{N, 2},
+    one_qubit_gate::Matrix{N},
+    initial_state::Matrix{N},
 ) where {N<:Number, I<:AbstractIM} = error("Not Yet Implemented")
 
 # ----------------------------------------------------------------------------------------------------------------------

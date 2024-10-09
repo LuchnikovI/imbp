@@ -1,4 +1,4 @@
-include("IMBP.jl")
+include("../src/IMBP.jl")
 
 using Random
 

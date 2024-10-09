@@ -20,5 +20,6 @@ struct Equations{N<:Number}
     self_consistency_eqs::Vector{Vector{Equation}}
     marginal_eqs::Vector{Equation}
     kernels::Dict{KernelID, Array{N, 4}}
+    one_qubit_gates::Vector{Matrix{N}}
     initial_states::Vector{Vector{N}}
 end

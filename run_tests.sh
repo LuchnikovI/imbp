@@ -46,6 +46,7 @@ function traverse() {
                     log INFO "Test ${file}: OK"
                 else
                     log ERROR "Test ${file}: FAILED"
+                    exit 1
                 fi
             fi
         else

@@ -20,8 +20,8 @@ function check_density(initial_states::Vector{Matrix{N}}) where {N<:Number}
     end
 end
 
-function check_channel(node1::Int64, node2::Int64, channel::Array{N, 8}) where {N<:Number}
-    choi = reshape(channel, (4, 4, 4, 4))
+function check_channel(node1::Int64, node2::Int64, channel::Matrix{N}) where {N<:Number}
+    choi = permutedims(reshape(channel, (4, 4, 4, 4)), (1, 3, 2, 4))
     @tensor trace[j, k] := choi[i, j, i, k]
     un_identity_traceness = norm(trace - Matrix{N}(I, 4, 4))
     choi = reshape(choi, (16, 16))
@@ -39,10 +39,12 @@ function check_channel(node1::Int64, node2::Int64, channel::Array{N, 8}) where {
 end
 
 mutable struct LatticeCell{N<:Number}
-    gates_seq::Vector{Tuple{Int64, Int64}}
-    gates::Dict{KernelID, Array{N, 4}}
+    two_qubit_gates_seq::Vector{Tuple{Int64, Int64}}
+    two_qubit_gates::Dict{KernelID, Array{N, 4}}
     initial_states::Vector{Vector{N}}
+    one_qubit_gates::Vector{Array{N, 2}}
     function LatticeCell(::Type{N}, initial_states::Vector{Matrix{N}}) where {N<:Number}
+        one_qubit_gates = [Matrix{N}(I, 4, 4) for _ in 1:length(initial_states)]
         check_density(initial_states)
         initial_states = map(dens -> begin
             dens_shape = size(dens)
@@ -51,21 +53,21 @@ mutable struct LatticeCell{N<:Number}
             end
             reshape(dens, (4,))
         end, initial_states)
-        new{N}(Tuple{Int64, Int64}[], Dict{KernelID, Array{N, 4}}(), initial_states)
+        new{N}(Tuple{Int64, Int64}[], Dict{KernelID, Array{N, 4}}(), initial_states, one_qubit_gates)
     end
 end
 
 get_nodes_number(lattice_cell::LatticeCell) = length(lattice_cell.initial_states)
 
-get_gates_number(lattice_cell::LatticeCell) = length(lattice_cell.gates_seq)
+get_gates_number(lattice_cell::LatticeCell) = length(lattice_cell.two_qubit_gates_seq)
 
 Base.in(time_pos::Int64, lattice_cell::LatticeCell) = get_nodes_number(lattice_cell) >= time_pos ? true : false
 
 function Base.getindex(lattice_cell::LatticeCell, time_pos::Int64)
-    time_pos in lattice_cell ? lattice_cell.gates_seq[time_pos] : error("There is not a gate with time position $gate_pos")
+    time_pos in lattice_cell ? lattice_cell.two_qubit_gates_seq[time_pos] : error("There is not a gate with time position $gate_pos")
 end
 
-function add_gate!(lattice_cell::LatticeCell{N}, node1::Int64, node2::Int64, gate::Array{N, 8}) where {N<:Number}
+function add_two_qubit_gate!(lattice_cell::LatticeCell{N}, node1::Int64, node2::Int64, gate::Matrix{N}) where {N<:Number}
     if node1 == 0 || node2 == 0
         error("Node ID must not be equal to zero, got IDs $node1 and $node2")
     elseif node1 == node2
@@ -76,21 +78,21 @@ function add_gate!(lattice_cell::LatticeCell{N}, node1::Int64, node2::Int64, gat
         error("There is not a gate with number $node2 in the lattice cell")
     end
     gate_shape = size(gate)
-    if gate_shape != (2, 2, 2, 2, 2, 2, 2, 2)
-        error("Gate shape must be equal to (2, 2, 2, 2, 2, 2, 2, 2), but got an array of shape $gate_shape")
+    if gate_shape != (16, 16)
+        error("Gate shape must be equal to (16, 16), but got an array of shape $gate_shape")
     end
     check_channel(node1, node2, gate)
-    gate = reshape(permutedims(gate, (1, 5, 2, 6, 3, 7, 4, 8)), (4, 4, 4, 4))
-    push!(lattice_cell.gates_seq, (node1, node2))
-    ker_id = length(lattice_cell.gates_seq)
-    lattice_cell.gates[KernelID(ker_id, true, (node1, node2))] = gate
-    lattice_cell.gates[KernelID(ker_id, false, (node1, node2))] = permutedims(gate, (2, 1, 4, 3))
+    gate = reshape(permutedims(reshape(gate, (2, 2, 2, 2, 2, 2, 2, 2)), (3, 1, 4, 2, 7, 5, 8, 6)), (4, 4, 4, 4))
+    push!(lattice_cell.two_qubit_gates_seq, (node1, node2))
+    ker_id = length(lattice_cell.two_qubit_gates_seq)
+    lattice_cell.two_qubit_gates[KernelID(ker_id, true, (node1, node2))] = permutedims(gate, (2, 1, 4, 3))
+    lattice_cell.two_qubit_gates[KernelID(ker_id, false, (node1, node2))] = gate
 end
 
 function get_equations(lattice_cell::LatticeCell{N})::Equations where{N<:Number}
     self_consistency_eqs = [Equation[] for _ in 1:get_nodes_number(lattice_cell)]
     marginal_eqs = [Equation() for _ in 1:get_nodes_number(lattice_cell)]
-    for (time_position, (left_node, right_node)) in enumerate(lattice_cell.gates_seq)
+    for (time_position, (left_node, right_node)) in enumerate(lattice_cell.two_qubit_gates_seq)
         left2right_im = IMID(time_position, true, (left_node, right_node))
         right2left_im = IMID(time_position, false, (left_node, right_node))
         left2right_ker = KernelID(time_position, true, (left_node, right_node))
@@ -110,7 +112,13 @@ function get_equations(lattice_cell::LatticeCell{N})::Equations where{N<:Number}
         push!(marginal_eqs[left_node], right2left_im)
         push!(marginal_eqs[right_node], left2right_im)
     end
-    Equations(self_consistency_eqs, marginal_eqs, lattice_cell.gates, lattice_cell.initial_states)
+    Equations(
+        self_consistency_eqs,
+        marginal_eqs,
+        lattice_cell.two_qubit_gates,
+        lattice_cell.one_qubit_gates,
+        lattice_cell.initial_states,
+    )
 end
 
 function initialize_ims_by_perfect_dissipators(
@@ -119,7 +127,7 @@ function initialize_ims_by_perfect_dissipators(
     time_steps_number::Int64,
 )::Dict{IMID, I} where {I<:AbstractIM}
     ims = Dict{IMID, I}()
-    for (time_position, (left_node, right_node)) in enumerate(lattice_cell.gates_seq)
+    for (time_position, (left_node, right_node)) in enumerate(lattice_cell.two_qubit_gates_seq)
         forward_id = IMID(time_position, true, (left_node, right_node))
         perf_diss = get_perfect_dissipator_im(I, time_steps_number)
         truncate!(perf_diss, 1)
@@ -134,13 +142,14 @@ function _single_equation_iter(
     equation::Equation,
     ims::Dict{IMID, I},
     kernels::Dict{KernelID, A},
+    one_qubit_gate::AbstractArray,
     initial_state::AbstractArray,
 ) where {I<:AbstractIM, A<:AbstractArray}
     kernel_ids = findall(id -> isa(id, KernelID), equation)
     @assert(length(kernel_ids) == 1)
     kernel_id = equation[kernel_ids[1]]
     @assert(isa(kernel_id, KernelID))
-    new_im = contract(equation, ims, kernels, initial_state)
+    new_im = contract(equation, ims, kernels, one_qubit_gate, initial_state)
     new_im, IMID(kernel_id)
 end
 
@@ -152,7 +161,7 @@ function _single_iter!(
     min_log_fid = 0.
     for (node, node_eqs) in enumerate(eqs.self_consistency_eqs)
         for equation in node_eqs
-            (new_im, imid) = _single_equation_iter(equation, ims, eqs.kernels, eqs.initial_states[node])
+            (new_im, imid) = _single_equation_iter(equation, ims, eqs.kernels, eqs.one_qubit_gates[node], eqs.initial_states[node])
             trunc_err = truncate!(new_im, rank_or_eps)
             direction = imid.is_forward ? imid.nodes : (imid.nodes[2], imid.nodes[1])
             log_fid = log_fidelity(new_im, ims[imid])

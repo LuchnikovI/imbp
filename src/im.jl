@@ -210,6 +210,7 @@ function contract(
     equation::Equation,
     ims::Dict{IMID, IM{N}},
     kernels::Dict{KernelID, Array{N, 4}},
+    one_qubit_gate::Matrix{N},
     initial_state::Vector{N},
 ) where {N<:Number}
     time_steps = get_time_steps_number(ims)
@@ -315,7 +316,8 @@ end
 function simulate_dynamics(
     equation::Equation,
     ims::Dict{IMID, IM{N}},
-    initial_state::Array{N, 2},
+    one_qubit_gate::Matrix{N},
+    initial_state::Matrix{N},
 ) where {N<:Number}
     time_steps = get_time_steps_number(ims)
     rhs_state = N[one(N)]
@@ -331,6 +333,6 @@ function simulate_dynamics(
         push!(dynamics, _get_dens(lhs_state, rhs_state))
         lhs_state = _fwd_evolution(lhs_state, equation, time_step, ims)
     end
-    #TODO: add the last state
+    push!(dynamics, _get_dens(lhs_state, N[one(N)]))
     dynamics
 end
