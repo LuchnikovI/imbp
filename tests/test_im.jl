@@ -31,6 +31,8 @@ kernels = Dict{IMBP.KernelID, Array{ComplexF64, 4}}(
     IMBP.KernelID(3, true, (0, 4)) => randn(rng, ComplexF64, 4, 4, 4, 4),
 )
 
+one_qubit_gate = randn(rng, ComplexF64, 4, 4)
+
 equation = IMBP.ElementID[
     IMBP.IMID(1, true, (1, 0)),
     IMBP.IMID(2, false, (0, 2)),
@@ -40,7 +42,7 @@ equation = IMBP.ElementID[
 
 initial_state = randn(rng, ComplexF64, 4)
 
-new_im = IMBP.contract(equation, ims, kernels, initial_state)
+new_im = IMBP.contract(equation, ims, kernels, one_qubit_gate, initial_state)
 for (i, ker) in enumerate(new_im.kernels)
     if i == 1
         @assert size(ker) == (1, 4, 4, 108)

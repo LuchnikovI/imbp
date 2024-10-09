@@ -8,7 +8,7 @@ truncate!(im::AbstractIM, rank_or_eps::Union{Int64, AbstractFloat}) = error("Not
 contract(
     equation::Equation,
     ims::Dict{IMID, I},
-    kernels::Dict{KernelID, A},
+    kernels::Dict{KernelID, Array{N, 4}},
     one_qubit_gate::Matrix{N},
     initial_state::Vector{N},
 ) where {N<:Number, I<:AbstractIM} = error("Not Yet Implemented")
@@ -20,7 +20,8 @@ get_bond_dimensions(im::AbstractIM) = error("Not Yet Implemented")
 get_time_steps_number(im::AbstractIM) = error("Not Yet Implemented")
 
 simulate_dynamics(
-    equation::Equation,
+    node_id::Int,
+    equations::Equations,
     ims::Dict{IMID, I},
     one_qubit_gate::Matrix{N},
     initial_state::Matrix{N},

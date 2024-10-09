@@ -183,6 +183,7 @@ function _build_ith_kernel(
     equation::Equation,
     ims::Dict{IMID, IM{N}},
     kernels::Dict{KernelID, Array{N, 4}},
+    one_qubit_gate::Matrix{N},
     initial_state::Vector{N},
     i::Int64,
 ) where {N<:Number}
@@ -193,6 +194,7 @@ function _build_ith_kernel(
     else
         reshape(Matrix{N}(I, state_dim, state_dim), (1, state_dim, 1, 1, state_dim, 1))
     end
+    @tensor ker[i, j, k, l, m, n] := one_qubit_gate[m, o] * ker[i, j, k, l, o, n]
     for id in equation
         ker = _update_kernel(ker, kernels, ims, id, i)
     end
@@ -216,7 +218,7 @@ function contract(
     time_steps = get_time_steps_number(ims)
     new_kernels = Array{N, 4}[]
     for i in 1:time_steps
-        push!(new_kernels, _build_ith_kernel(equation, ims, kernels, initial_state, i))
+        push!(new_kernels, _build_ith_kernel(equation, ims, kernels, one_qubit_gate, initial_state, i))
     end
     IM(new_kernels)
 end
@@ -261,8 +263,10 @@ function _fwd_evolution(
     state::Array{N, 2},
     equation::Equation,
     time_step::Int64,
+    one_qubit_gate::Matrix{N},
     ims::Dict{IMID, IM{N}},
 ) where {N<:Number}
+    @tensor state[i, j] := state[i, k] * one_qubit_gate[j, k]
     for id in equation
         @assert isa(id, IMID)
         ker = ims[id].kernels[time_step]
@@ -314,11 +318,13 @@ function _get_dens(lhs_state::Array{N, 2}, rhs_state::Vector{N}) where {N<:Numbe
 end
 
 function simulate_dynamics(
-    equation::Equation,
+    node_id::Int,
+    equations::Equations,
     ims::Dict{IMID, IM{N}},
-    one_qubit_gate::Matrix{N},
     initial_state::Matrix{N},
 ) where {N<:Number}
+    equation = equations.marginal_eqs[node_id]
+    one_qubit_gate = equations.one_qubit_gates[node_id]
     time_steps = get_time_steps_number(ims)
     rhs_state = N[one(N)]
     rhs_states = Vector{N}[]
@@ -331,7 +337,7 @@ function simulate_dynamics(
     dynamics = Array{N, 2}[]
     for (time_step, rhs_state) in enumerate(rhs_states)
         push!(dynamics, _get_dens(lhs_state, rhs_state))
-        lhs_state = _fwd_evolution(lhs_state, equation, time_step, ims)
+        lhs_state = _fwd_evolution(lhs_state, equation, time_step, one_qubit_gate, ims)
     end
     push!(dynamics, _get_dens(lhs_state, N[one(N)]))
     dynamics

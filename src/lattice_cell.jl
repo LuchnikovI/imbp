@@ -69,7 +69,7 @@ end
 
 function add_two_qubit_gate!(lattice_cell::LatticeCell{N}, node1::Int64, node2::Int64, gate::Matrix{N}) where {N<:Number}
     if node1 == 0 || node2 == 0
-        error("Node ID must not be equal to zero, got IDs $node1 and $node2")
+        error("Node ID must be > 0, got IDs $node1 and $node2")
     elseif node1 == node2
         error("Gate must act on different nodes, but it acts on $node1 and $node2")
     elseif !(node1 in lattice_cell)
@@ -87,6 +87,21 @@ function add_two_qubit_gate!(lattice_cell::LatticeCell{N}, node1::Int64, node2::
     ker_id = length(lattice_cell.two_qubit_gates_seq)
     lattice_cell.two_qubit_gates[KernelID(ker_id, true, (node1, node2))] = permutedims(gate, (2, 1, 4, 3))
     lattice_cell.two_qubit_gates[KernelID(ker_id, false, (node1, node2))] = gate
+end
+
+function add_one_qubit_gate!(lattice_cell::LatticeCell{N}, node::Int64, gate::Matrix{N}) where {N<:Number}
+    if node == 0
+        error("Node ID must be > 0, got ID $node")
+    elseif !(node in lattice_cell)
+        error("There is not a gate with number $node in the lattice cell")
+    end
+    gate_shape = size(gate)
+    if gate_shape != (4, 4)
+        error("Gate shape must be equal to (4, 4), but got an array of shape $gate_shape")
+    end
+    # TODO: add CPTP properties validation
+    gate = reshape(permutedims(reshape(gate, (2, 2, 2, 2)), (2, 1, 4, 3)), (4, 4))
+    lattice_cell.one_qubit_gates[node] = gate
 end
 
 function get_equations(lattice_cell::LatticeCell{N})::Equations where{N<:Number}
