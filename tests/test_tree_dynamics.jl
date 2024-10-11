@@ -53,7 +53,7 @@ add_two_qubit_gate!(lc, 6, 4, two_qubit_channel)
 
 eqs = get_equations(lc)
 ims = initialize_ims_by_perfect_dissipators(IM{ComplexF64}, lc, layers_number)
-iterate_equations!(eqs, ims, 1e-6, 30, -1e-12)
+iterate_equations!(eqs, ims, 1e-6, 30, 1e-10)
 
 im_dyn = simulate_dynamics(3, eqs, ims, initial_dens)
 for (im_dens, exact_dens) in zip(im_dyn, exact_dyn)

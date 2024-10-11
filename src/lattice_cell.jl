@@ -2,6 +2,10 @@ using Logging
 using LinearAlgebra
 using TensorOperations
 
+include("convergence_info.jl")
+
+using .ConvergenceInfo
+
 function check_density(initial_states::Vector{Matrix{N}}) where {N<:Number}
     for (node_number, in_st) in enumerate(initial_states)
         trace = tr(in_st)
@@ -171,38 +175,40 @@ end
 function _single_iter!(
     eqs::Equations,
     ims::Dict{IMID, I},
-    rank_or_eps::Union{Int64, F}
+    rank_or_eps::Union{Int64, F},
+    information::Vector{InfoCell{F}},
 ) where {F<:AbstractFloat, I<:AbstractIM}
-    min_log_fid = 0.
+    info_cell = InfoCell(F)
     for (node, node_eqs) in enumerate(eqs.self_consistency_eqs)
         for equation in node_eqs
             (new_im, imid) = _single_equation_iter(equation, ims, eqs.kernels, eqs.one_qubit_gates[node], eqs.initial_states[node])
             trunc_err = truncate!(new_im, rank_or_eps)
             direction = imid.is_forward ? imid.nodes : (imid.nodes[2], imid.nodes[1])
             log_fid = log_fidelity(new_im, ims[imid])
-            min_log_fid = min(log_fid, min_log_fid)
+            add_point!(info_cell, trunc_err, one(F) - exp(log_fid))
             final_bond_dims = get_bond_dimensions(new_im)
-            @debug "IM recomputed:" direction log_fid trunc_err final_bond_dims
+            @debug "IM recomputed:" direction info_cell final_bond_dims
             ims[imid] = new_im
         end
     end
-    min_log_fid
+    push!(information, info_cell)
 end
 
 function iterate_equations!(
     eqs::Equations,
     ims::Dict{IMID, I},
-    rank_or_eps::Union{Int64, N},
+    rank_or_eps::Union{Int64, F},
     max_iter::Int64 = 100,
-    log_fid::AbstractFloat = 1e-10,
-) where {N<:AbstractFloat, I<:AbstractIM}
-    min_log_fid = 0.
+    infidelity::F = 1e-6,
+) where {F<:AbstractFloat, I<:AbstractIM}
+    information = InfoCell{F}[]
     for iter_num in 1:convert(UInt64, max_iter)
-        min_log_fid = _single_iter!(eqs, ims, rank_or_eps)
-        @info "Iteration" iter_num min_log_fid
-        if log_fid < min_log_fid
-            return min_log_fid
+        _single_iter!(eqs, ims, rank_or_eps, information)
+        current_information = information[end]
+        @info "Iteration" iter_num current_information
+        if current_information.max_infidelity < infidelity
+            return information
         end
     end
-    min_log_fid
+    information
 end

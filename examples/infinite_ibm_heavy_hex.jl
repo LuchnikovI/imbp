@@ -5,7 +5,7 @@ include("../src/IMBP.jl")
 using .IMBP
 
 # mixing quantum channl
-theta = 0.6
+theta = 0.9
 mixing_gate = exp((-im * theta / 2) * ComplexF64[0 1 ; 1 0])
 mixing_channel = kron(mixing_gate, conj(mixing_gate))
 
@@ -27,9 +27,9 @@ add_two_qubit_gate!(lattice_cell, 5, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 2, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 1, 5, int_channel)
 equations = get_equations(lattice_cell)
-ims = initialize_ims_by_perfect_dissipators(IMBP.IM{ComplexF64}, lattice_cell, 20)
-iterate_equations!(equations, ims, 8, 100, -1e-8)
-dens_dyn = IMBP.simulate_dynamics(
+ims = initialize_ims_by_perfect_dissipators(IM{ComplexF64}, lattice_cell, 20)
+info = iterate_equations!(equations, ims, 10, 100, 1e-13)
+dens_dyn = simulate_dynamics(
     2,
     equations,
     ims,

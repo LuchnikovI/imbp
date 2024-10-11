@@ -1,5 +1,7 @@
 using LinearAlgebra
 using TensorOperations
+using RandomizedLinAlg
+using Logging
 
 function _check_dims_consistency(kernels::Vector{Array{N, 4}}) where {N}
     kernels_number = length(kernels)
@@ -42,28 +44,37 @@ function _push_right(msg::Array{N, 2}, ker::Array{N, 4}) where {N<:Number}
     new_ker, new_msg
 end
 
-find_rank(lmbd::Array{N, 1}, rank::Int64) where {N<:Number} = min(size(lmbd)[1], rank)
-
 function find_rank(lmbd::Array{N, 1}, eps::AbstractFloat) where {N<:Number}
     lmbd_norm = norm(lmbd)
     rank = length(lmbd) - sum(sqrt.(cumsum(map(l -> (real(l) / lmbd_norm)^2, reverse(lmbd)))) .< eps)
     rank
 end
 
-function _push_left_truncate(ker::Array{N, 4}, msg::Array{N, 2}, rank_or_eps::Union{Int64, AbstractFloat}) where {N<:Number}
+function _truncated_svd(ker::Matrix{N}, rank::Int64) where {N<:Number}
+    n, m = size(ker)
+    rank = min(rank, n, m)
+    fac = svd(ker)
+    u, lmbd, vt = fac.U, fac.S, fac.Vt
+    u[:, 1:rank], lmbd[1:rank], vt[1:rank, :]
+end
+
+function _truncated_svd(ker::Matrix{N}, eps::AbstractFloat) where {N<:Number}
+    fac = svd(ker)
+    u, lmbd, vt = fac.U, fac.S, fac.Vt
+    rank = find_rank(lmbd, eps)
+    u[:, 1:rank], lmbd[1:rank], vt[1:rank, :]
+end
+
+function _push_left_truncate(ker::Array{N, 4}, msg::Matrix{N}, rank_or_eps::Union{Int64, AbstractFloat}) where {N<:Number}
     old_ker_shape = size(ker)
     right_bond = size(msg)[2]
     @tensor kermsg[i, k, l, q] := ker[i, k, l, p] * msg[p, q]
     kermsg_resh = reshape(kermsg, (old_ker_shape[1], :))
     @assert(size(kermsg_resh) == (old_ker_shape[1], 16 * right_bond))
-    fac = svd(kermsg_resh)
-    u, lmbd, vt = fac.U, fac.S, fac.Vt
-    rank = find_rank(lmbd, rank_or_eps)
-    err = sqrt(reduce((x, y) -> real(x)^2 + real(y)^2, lmbd[(rank + 1):length(lmbd)]; init=zero(real(N)))) / norm(lmbd)
-    lmbd = Diagonal(lmbd[1:rank])
-    u = u[:, 1:rank]
-    vt = vt[1:rank, :]
-    new_msg = u * lmbd
+    u, lmbd, vt = _truncated_svd(kermsg_resh, rank_or_eps)
+    full_norm = norm(kermsg_resh)
+    err = sqrt(abs(full_norm^2 - norm(lmbd)^2)) / full_norm
+    new_msg = u .* reshape(lmbd, 1, :)
     normalize!(new_msg)
     new_ker = reshape(vt, (:, old_ker_shape[2:3]..., right_bond))
     new_msg, new_ker, err
