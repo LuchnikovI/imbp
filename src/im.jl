@@ -1,9 +1,4 @@
-using LinearAlgebra
-using TensorOperations
-using RandomizedLinAlg
-using Logging
-
-function _check_dims_consistency(kernels::Vector{Array{N, 4}}) where {N}
+function _check_dims_consistency(kernels::Vector{<:AbstractArray{<:Number}})
     kernels_number = length(kernels)
     first_ker_shape = size(kernels[1])
     if first_ker_shape[2] != first_ker_shape[3]
@@ -31,7 +26,7 @@ function _check_dims_consistency(kernels::Vector{Array{N, 4}}) where {N}
     end
 end
 
-function _push_right(msg::Array{N, 2}, ker::Array{N, 4}) where {N<:Number}
+function _push_right(msg::AbstractArray{T}, ker::AbstractArray{T}) where {T<:Number}
     old_ker_shape = size(ker)
     left_bond = size(msg)[1]
     @tensor msgker[i, k, l, q] := msg[i, j] * ker[j, k, l, q]
@@ -44,13 +39,13 @@ function _push_right(msg::Array{N, 2}, ker::Array{N, 4}) where {N<:Number}
     new_ker, new_msg
 end
 
-function find_rank(lmbd::Array{N, 1}, eps::AbstractFloat) where {N<:Number}
+function find_rank(lmbd::AbstractArray{<:Number}, eps::AbstractFloat)
     lmbd_norm = norm(lmbd)
     rank = length(lmbd) - sum(sqrt.(cumsum(map(l -> (real(l) / lmbd_norm)^2, reverse(lmbd)))) .< eps)
     rank
 end
 
-function _truncated_svd(ker::Matrix{N}, rank::Int64) where {N<:Number}
+function _truncated_svd(ker::AbstractArray{<:Number}, rank::Int64)
     n, m = size(ker)
     rank = min(rank, n, m)
     fac = svd(ker)
@@ -58,14 +53,14 @@ function _truncated_svd(ker::Matrix{N}, rank::Int64) where {N<:Number}
     u[:, 1:rank], lmbd[1:rank], vt[1:rank, :]
 end
 
-function _truncated_svd(ker::Matrix{N}, eps::AbstractFloat) where {N<:Number}
+function _truncated_svd(ker::AbstractArray{<:Number}, eps::AbstractFloat)
     fac = svd(ker)
     u, lmbd, vt = fac.U, fac.S, fac.Vt
     rank = find_rank(lmbd, eps)
     u[:, 1:rank], lmbd[1:rank], vt[1:rank, :]
 end
 
-function _push_left_truncate(ker::Array{N, 4}, msg::Matrix{N}, rank_or_eps::Union{Int64, AbstractFloat}) where {N<:Number}
+function _push_left_truncate(ker::AbstractArray{T}, msg::AbstractArray{T}, rank_or_eps::Union{Int64, AbstractFloat}) where {T<:Number}
     old_ker_shape = size(ker)
     right_bond = size(msg)[2]
     @tensor kermsg[i, k, l, q] := ker[i, k, l, p] * msg[p, q]
@@ -86,51 +81,73 @@ function _log_norm!(a::AbstractArray)
     log(n)
 end
 
-mutable struct IM{N<:Number} <: AbstractIM
-    kernels::Vector{Array{N, 4}}
-    function IM(kernels::Vector{Array{N, 4}}) where {N<:Number}
+mutable struct IM{A<:AbstractArray{<:Number}} <: AbstractIM
+    kernels::Vector{A}
+    function IM(kernels::Vector{A}) where {A<:AbstractArray}
         _check_dims_consistency(kernels)
-        new{N}(kernels)
+        new{A}(kernels)
     end
 end
 
 get_time_steps_number(im::IM) = length(im.kernels)
 
-function perfect_dissipator_kernel(::Type{N}, hilbert_space_size::Int) where {N<:Number}
+function perfect_dissipator_kernel(::Type{A}, hilbert_space_size::Integer) where {T<:Number, A<:AbstractArray{T}}
     dens_matrix_size = hilbert_space_size * hilbert_space_size
-    eye = Matrix{N}(I, hilbert_space_size, hilbert_space_size)
+    eye = get_id_matrix(A, 2)
     @tensor diss[i, j, k, l] := eye[i, j] * eye[k, l]
     reshape(diss, (1, dens_matrix_size, dens_matrix_size, 1))
 end
 
-function _random_im(::Type{N}, rng, bond_dim::Int64, time_steps_number::Int64) where {N<:Number}
-    kernels = Array{N, 4}[]
-    push!(kernels, randn(rng, N, (1, 4, 4, bond_dim)))
+function _random_im(::Type{T}, rng, bond_dim::Int64, time_steps_number::Int64) where {T<:Number}
+    kernels = Array{T}[]
+    push!(kernels, randn(rng, T, (1, 4, 4, bond_dim)))
     for _ in 1:(time_steps_number - 2)
-        push!(kernels, randn(rng, N, (bond_dim, 4, 4, bond_dim)))
+        push!(kernels, randn(rng, T, (bond_dim, 4, 4, bond_dim)))
     end
-    push!(kernels, randn(rng, N, (bond_dim, 4, 4, 1)))
+    push!(kernels, randn(rng, T, (bond_dim, 4, 4, 1)))
     IM(kernels)
 end
 
-function get_perfect_dissipator_im(::Type{IM{N}}, time_steps_number::Int64) where {N<:Number}
-    IM([perfect_dissipator_kernel(N, 2) for _ in 1:time_steps_number])
+function get_perfect_dissipator_im(::Type{IM{A}}, time_steps_number::Int64) where {T<:Number, A<:AbstractArray{T}}
+    IM(A[perfect_dissipator_kernel(A, 2) for _ in 1:time_steps_number])
 end
 
-function _set_to_left_canonical!(im::IM{N}) where {N<:Number}
-    msg = ones(N, 1, 1)
+function _set_to_left_canonical!(im::IM{A}) where {T<:Number, A<:AbstractArray{T}}
+    msg = ones(T, 1, 1)
     for (pos, ker) in enumerate(im.kernels)
         im.kernels[pos], msg = _push_right(msg, ker)
     end
     _check_dims_consistency(im.kernels)
 end
 
-function _truncate_left_canonical!(im::IM{N}, rank_or_eps::Union{Int64, AbstractFloat}) where {N<:Number}
-    msg = ones(N, 1, 1)
+function _set_to_right_canonical!(im::IM{A}) where {T<:Number, A<:AbstractArray{T}}
+    msg = ones(T, 1, 1)
+    im_len = get_time_steps_number(im)
+    for (pos, ker) in enumerate(reverse(im.kernels))
+        new_ker, msg = _push_right(msg, permutedims(ker, (4, 3, 2, 1)))
+        im.kernels[im_len - pos + 1] = permutedims(new_ker, (4, 3, 2, 1))
+    end
+    _check_dims_consistency(im.kernels)
+end
+
+function _truncate_left_canonical!(im::IM{A}, rank_or_eps::Union{Int64, AbstractFloat}) where {T<:Number, A<:AbstractArray{T}}
+    msg = ones(T, 1, 1)
     ker_num = get_time_steps_number(im)
-    err = zero(real(N))
+    err = zero(real(T))
     for (pos, ker) in enumerate(reverse(im.kernels))
         msg, im.kernels[ker_num + 1 - pos], new_err = _push_left_truncate(ker, msg, rank_or_eps)
+        err = max(err, new_err)
+    end
+    _check_dims_consistency(im.kernels)
+    err
+end
+
+function _truncate_right_canonical!(im::IM{A}, rank_or_eps::Union{Int64, AbstractFloat}) where {T<:Number, A<:AbstractArray{T}}
+    msg = ones(T, 1, 1)
+    err = zero(real(T))
+    for (pos, ker) in enumerate(im.kernels)
+        msg, new_ker, new_err = _push_left_truncate(permutedims(ker, (4, 3, 2, 1)), msg, rank_or_eps)
+        im.kernels[pos] = permutedims(new_ker, (4, 3, 2, 1))
         err = max(err, new_err)
     end
     _check_dims_consistency(im.kernels)
@@ -140,6 +157,8 @@ end
 function truncate!(im::IM, rank_or_eps::Union{Int64, AbstractFloat})
     _set_to_left_canonical!(im)
     _truncate_left_canonical!(im, rank_or_eps)
+    #_set_to_right_canonical!(im)
+    #_truncate_right_canonical!(im, rank_or_eps)
 end
 
 function _hs_dim_from_dens_dim(dens_dim::Int64)
@@ -149,12 +168,12 @@ function _hs_dim_from_dens_dim(dens_dim::Int64)
 end
 
 function _update_kernel(
-    ker::Array{N, 6},
-    kernels::Dict{KernelID, Array{N, 4}},
-    ::Dict{IMID, IM{N}},
+    ker::AbstractArray{T},
+    kernels::Dict{KernelID, <:AbstractArray{T}},
+    ::Dict{IMID, IM{A}},
     id::KernelID,
     ::Int,
-) where {N<:Number}
+) where {T<:Number, A<:AbstractArray{T}}
     rhs = kernels[id]
     ker_shape = size(ker)
     rhs_shape = size(rhs)
@@ -170,12 +189,12 @@ function _update_kernel(
 end
 
 function _update_kernel(
-    ker::Array{N, 6},
-    ::Dict{KernelID, Array{N, 4}},
-    ims::Dict{IMID, IM{N}},
+    ker::AbstractArray{T},
+    ::Dict{KernelID, <:AbstractArray{T}},
+    ims::Dict{IMID, IM{A}},
     id::IMID,
     time_position::Int,
-) where {N<:Number}
+) where {T<:Number, A<:AbstractArray{T}}
     rhs = ims[id].kernels[time_position]
     ker_shape = size(ker)
     rhs_shape = size(rhs)
@@ -192,18 +211,18 @@ end
 
 function _build_ith_kernel(
     equation::Equation,
-    ims::Dict{IMID, IM{N}},
-    kernels::Dict{KernelID, Array{N, 4}},
-    one_qubit_gate::Matrix{N},
-    initial_state::Vector{N},
+    ims::Dict{IMID, IM{A}},
+    kernels::Dict{KernelID, <:AbstractArray{T}},
+    one_qubit_gate::AbstractArray{T},
+    initial_state::AbstractArray{T},
     i::Int64,
-) where {N<:Number}
+) where {T<:Number, A <: AbstractArray{T}}
     time_steps = get_time_steps_number(ims)
     state_dim = size(initial_state)[1]
     ker = if i == 1
         reshape(initial_state, (1, 1, 1, 1, state_dim, 1))
     else
-        reshape(Matrix{N}(I, state_dim, state_dim), (1, state_dim, 1, 1, state_dim, 1))
+        reshape(get_id_matrix(A, state_dim), (1, state_dim, 1, 1, state_dim, 1))
     end
     @tensor ker[i, j, k, l, m, n] := one_qubit_gate[m, o] * ker[i, j, k, l, o, n]
     for id in equation
@@ -211,7 +230,7 @@ function _build_ith_kernel(
     end
     if i == time_steps
         hs_dim = _hs_dim_from_dens_dim(state_dim)
-        tr = reshape(Matrix{N}(I, hs_dim, hs_dim), (state_dim, 1))
+        tr = reshape(get_id_matrix(A, hs_dim), (state_dim, 1))
         @tensor ker[i, j, k, l, m, n] := ker[i, j, k, l, q, n] * tr[q, m]
     end
     ker_shape = size(ker)
@@ -221,22 +240,22 @@ end
 
 function contract(
     equation::Equation,
-    ims::Dict{IMID, IM{N}},
-    kernels::Dict{KernelID, Array{N, 4}},
-    one_qubit_gate::Matrix{N},
-    initial_state::Vector{N},
-) where {N<:Number}
+    ims::Dict{IMID, IM{A}},
+    kernels::Dict{KernelID, <:AbstractArray{T}},
+    one_qubit_gate::AbstractArray{T},
+    initial_state::AbstractArray{T},
+) where {T<:Number, A<:AbstractArray{T}}
     time_steps = get_time_steps_number(ims)
-    new_kernels = Array{N, 4}[]
+    new_kernels = A[]
     for i in 1:time_steps
         push!(new_kernels, _build_ith_kernel(equation, ims, kernels, one_qubit_gate, initial_state, i))
     end
     IM(new_kernels)
 end
 
-function log_fidelity(lhs::IM{N}, rhs::IM{N}) where {N<:Number}
-    msg = ones(N, 1, 1)
-    log_fid = zero(N)
+function log_fidelity(lhs::IM{<:AbstractArray{T}}, rhs::IM{<:AbstractArray{T}}) where {T<:Number}
+    msg = ones(T, 1, 1)
+    log_fid = zero(T)
     for (ker_lhs, ker_rhs) in zip(lhs.kernels, rhs.kernels)
         ker_rhs = conj(ker_rhs)
         @tensor begin
@@ -258,9 +277,9 @@ function get_bond_dimensions(im::IM)
 end
 
 function _fwd_evolution(
-    state::Array{N, 2},
-    ker::Array{N, 4},
-) where {N<:Number}
+    state::AbstractArray{T},
+    ker::AbstractArray{T},
+) where {T<:Number}
     ker_shape = size(ker)
     state_shape = size(state)
     resh_state = reshape(state, (ker_shape[1], :, state_shape[2]))
@@ -271,12 +290,12 @@ function _fwd_evolution(
 end
 
 function _fwd_evolution(
-    state::Array{N, 2},
+    state::AbstractArray{T},
     equation::Equation,
     time_step::Int64,
-    one_qubit_gate::Matrix{N},
-    ims::Dict{IMID, IM{N}},
-) where {N<:Number}
+    one_qubit_gate::AbstractArray{T},
+    ims::Dict{IMID, IM{A}},
+) where {T<:Number, A<:AbstractArray{T}}
     @tensor state[i, j] := state[i, k] * one_qubit_gate[j, k]
     for id in equation
         @assert isa(id, IMID)
@@ -287,17 +306,24 @@ function _fwd_evolution(
 end
 
 function _bwd_evolution(
-    state::Vector{N},
-    ker::Array{N, 4},
-) where {N<:Number}
+    state::AbstractArray{T},
+    ker::AbstractArray{T},
+) where {T<:Number}
     ker_shape = size(ker)
     sqrt_inp_tr_dim = round(Int64, sqrt(ker_shape[2]))
     @assert sqrt_inp_tr_dim * sqrt_inp_tr_dim == ker_shape[2]
     sqrt_out_tr_dim = round(Int64, sqrt(ker_shape[3]))
     @assert sqrt_out_tr_dim * sqrt_out_tr_dim == ker_shape[3]
-    inp_tr = reshape(Matrix{N}(I, sqrt_inp_tr_dim, sqrt_inp_tr_dim), (:,))
-    out_tr = reshape(Matrix{N}(I, sqrt_out_tr_dim, sqrt_out_tr_dim), (:,))
-    @tensor reduced_ker[i, l] := ker[i, j, k, l] * inp_tr[j] * out_tr[k]
+    resh_ker = reshape(
+        ker,
+        ker_shape[1],
+        sqrt_inp_tr_dim,
+        sqrt_inp_tr_dim,
+        sqrt_out_tr_dim,
+        sqrt_out_tr_dim,
+        ker_shape[4],
+    )
+    @tensor reduced_ker[i, j] := resh_ker[i, q, q, p, p, j]
     resh_state = reshape(state, (:, ker_shape[4]))
     @tensor new_state[i, k] := reduced_ker[i, j] * resh_state[k, j]
     new_state = reshape(new_state, (:,))
@@ -306,11 +332,11 @@ function _bwd_evolution(
 end
 
 function _bwd_evolution(
-    state::Vector{N},
+    state::AbstractArray{T},
     equation::Equation,
     time_step::Int64,
-    ims::Dict{IMID, IM{N}},
-) where {N<:Number}
+    ims::Dict{IMID, IM{A}},
+) where {T<:Number, A<:AbstractArray{T}}
     for id in reverse(equation)
         @assert isa(id, IMID)
         ker = ims[id].kernels[time_step]
@@ -319,7 +345,7 @@ function _bwd_evolution(
     state
 end
 
-function _get_dens(lhs_state::Array{N, 2}, rhs_state::Vector{N}) where {N<:Number}
+function _get_dens(lhs_state::AbstractArray{T}, rhs_state::AbstractArray{T}) where {T<:Number}
     @tensor dens[j] := lhs_state[i, j] * rhs_state[i]
     sqrt_dim = round(Int64, sqrt(length(dens)))
     @assert sqrt_dim * sqrt_dim == length(dens)
@@ -331,25 +357,28 @@ end
 function simulate_dynamics(
     node_id::Int,
     equations::Equations,
-    ims::Dict{IMID, IM{N}},
-    initial_state::Matrix{N},
-) where {N<:Number}
+    ims::Dict{IMID, IM{A}},
+    initial_state::AbstractArray{T},
+) where {T<:Number, A<:AbstractArray{T}}
     equation = equations.marginal_eqs[node_id]
     one_qubit_gate = equations.one_qubit_gates[node_id]
     time_steps = get_time_steps_number(ims)
-    rhs_state = N[one(N)]
-    rhs_states = Vector{N}[]
+    rhs_state = A(undef, 1)
+    rhs_state[1] = one(T)
+    rhs_states = AbstractArray{T}[]
     for time_step in reverse(1:time_steps)
         rhs_state = _bwd_evolution(rhs_state, equation, time_step, ims)
         push!(rhs_states, rhs_state)
     end
     reverse!(rhs_states)
     lhs_state = reshape(initial_state, (1, :))
-    dynamics = Array{N, 2}[]
+    dynamics = AbstractArray{T}[]
     for (time_step, rhs_state) in enumerate(rhs_states)
         push!(dynamics, _get_dens(lhs_state, rhs_state))
         lhs_state = _fwd_evolution(lhs_state, equation, time_step, one_qubit_gate, ims)
     end
-    push!(dynamics, _get_dens(lhs_state, N[one(N)]))
+    rhs_state = A(undef, 1)
+    rhs_state[1] = one(T)
+    push!(dynamics, _get_dens(lhs_state, rhs_state))
     dynamics
 end

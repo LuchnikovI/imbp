@@ -10,7 +10,7 @@ gates = [let u = random_unitary(Float64, rng, 4); kron(u, conj(u)) end for _ in 
 true_flipped_kernels = map(x -> reshape(permutedims(reshape(x, (2, 2, 2, 2, 2, 2, 2, 2)), (3, 1, 4, 2, 7, 5, 8, 6)), (4, 4, 4, 4)), gates)
 true_kernels = map(x -> permutedims(x, (2, 1, 4, 3)), true_flipped_kernels)
 
-lattice_cell = LatticeCell(ComplexF64, true_initial_states)
+lattice_cell = LatticeCell(true_initial_states)
 add_two_qubit_gate!(lattice_cell, 1, 2, gates[1])
 add_two_qubit_gate!(lattice_cell, 4, 5, gates[2])
 add_two_qubit_gate!(lattice_cell, 3, 5, gates[3])

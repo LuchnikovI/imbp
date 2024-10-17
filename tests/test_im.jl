@@ -2,10 +2,10 @@ include("../src/IMBP.jl")
 
 using Random
 
-dissipator = IMBP.perfect_dissipator_kernel(Int32, 2)
+dissipator = IMBP.perfect_dissipator_kernel(Array{ComplexF64}, 2)
 @assert(size(dissipator) == (1, 4, 4, 1))
 @assert(reshape(dissipator, :) == [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1])
-diss_im = IMBP.get_perfect_dissipator_im(IMBP.IM{ComplexF64}, 20)
+diss_im = IMBP.get_perfect_dissipator_im(IMBP.IM{Array{ComplexF64}}, 20)
 @assert(IMBP.get_time_steps_number(diss_im) == 20)
 @assert(IMBP.get_bond_dimensions(diss_im) == [1 for _ in 1:21])
 
@@ -21,7 +21,7 @@ IMBP._truncate_left_canonical!(rand_im_clone1, 63)
 IMBP._truncate_left_canonical!(rand_im_clone2, 1e-5)
 @assert(abs(IMBP.log_fidelity(rand_im_clone2, rand_im)) < 1e-5)
 
-ims = Dict{IMBP.IMID, IMBP.IM{ComplexF64}}(
+ims = Dict{IMBP.IMID, IMBP.IM{Array{ComplexF64}}}(
     IMBP.IMID(1, true, (1, 0)) => IMBP._random_im(ComplexF64, rng, 3, 20),
     IMBP.IMID(2, false, (0, 2)) => IMBP._random_im(ComplexF64, rng, 3, 20),
     IMBP.IMID(4, false, (0, 3)) => IMBP._random_im(ComplexF64, rng, 3, 20),

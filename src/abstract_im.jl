@@ -7,11 +7,11 @@ truncate!(im::AbstractIM, rank_or_eps::Union{Int64, AbstractFloat}) = error("Not
 
 contract(
     equation::Equation,
-    ims::Dict{IMID, I},
-    kernels::Dict{KernelID, Array{N, 4}},
-    one_qubit_gate::Matrix{N},
-    initial_state::Vector{N},
-) where {N<:Number, I<:AbstractIM} = error("Not Yet Implemented")
+    ims::Dict{IMID, <:AbstractIM},
+    kernels::Dict{KernelID, <:AbstractArray{T}},
+    one_qubit_gate::AbstractArray{T},
+    initial_state::AbstractArray{T},
+) where {T<:Number} = error("Not Yet Implemented")
 
 log_fidelity(lhs::AbstractIM, rhs::AbstractIM) = error("Not Yet Implemented")
 
@@ -23,9 +23,9 @@ simulate_dynamics(
     node_id::Int,
     equations::Equations,
     ims::Dict{IMID, I},
-    one_qubit_gate::Matrix{N},
-    initial_state::Matrix{N},
-) where {N<:Number, I<:AbstractIM} = error("Not Yet Implemented")
+    one_qubit_gate::AbstractArray{T},
+    initial_state::AbstractArray{T},
+) where {T<:Number, I<:AbstractIM} = error("Not Yet Implemented")
 
 # ----------------------------------------------------------------------------------------------------------------------
 

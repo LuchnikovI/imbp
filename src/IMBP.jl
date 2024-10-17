@@ -1,6 +1,7 @@
 module IMBP
 
-export LatticeCell, IM, add_two_qubit_gate!, add_one_qubit_gate!, get_equations, initialize_ims_by_perfect_dissipators, simulate_dynamics, iterate_equations!
+export LatticeCell, IM, add_two_qubit_gate!, add_one_qubit_gate!, get_equations,
+    initialize_ims_by_perfect_dissipators, simulate_dynamics, iterate_equations!
 
 include("equations.jl")
 include("abstract_im.jl")

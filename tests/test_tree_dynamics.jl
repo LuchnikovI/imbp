@@ -17,7 +17,7 @@ for (pos, u) in enumerate(one_qubit_gate_list)
     apply_one_qubit_gate!(qs, u, pos)
 end
 
-lc = LatticeCell(ComplexF64, [get_one_qubit_dens(qs, pos) for pos in 1:6])
+lc = LatticeCell([get_one_qubit_dens(qs, pos) for pos in 1:6])
 
 two_qubit_gate_list = [random_unitary(Float64, rng, 4) for _ in 1:5]
 one_qubit_gate_list = [random_unitary(Float64, rng, 2) for _ in 1:6]
@@ -52,7 +52,7 @@ two_qubit_channel = kron(two_qubit_gate_list[5], conj(two_qubit_gate_list[5]))
 add_two_qubit_gate!(lc, 6, 4, two_qubit_channel)
 
 eqs = get_equations(lc)
-ims = initialize_ims_by_perfect_dissipators(IM{ComplexF64}, lc, layers_number)
+ims = initialize_ims_by_perfect_dissipators(IM{Array{ComplexF64}}, lc, layers_number)
 iterate_equations!(eqs, ims, 1e-6, 30, 1e-10)
 
 im_dyn = simulate_dynamics(3, eqs, ims, initial_dens)
