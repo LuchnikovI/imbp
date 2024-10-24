@@ -2,10 +2,11 @@ include("../src/IMBP.jl")
 
 using Random
 
-dissipator = IMBP.perfect_dissipator_kernel(Array{ComplexF64}, 2)
+dispatch_arr = ones(ComplexF64, 1)
+dissipator = IMBP.perfect_dissipator_kernel(dispatch_arr, 2)
 @assert(size(dissipator) == (1, 4, 4, 1))
 @assert(reshape(dissipator, :) == [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1])
-diss_im = IMBP.get_perfect_dissipator_im(IMBP.IM{Array{ComplexF64}}, 20)
+diss_im = IMBP.get_perfect_dissipator_im(IMBP.IM{Array{ComplexF64}}, dispatch_arr, 20)
 @assert(IMBP.get_time_steps_number(diss_im) == 20)
 @assert(IMBP.get_bond_dimensions(diss_im) == [1 for _ in 1:21])
 
@@ -42,12 +43,16 @@ equation = IMBP.ElementID[
 
 initial_state = randn(rng, ComplexF64, 4)
 
-new_im = IMBP.contract(equation, ims, kernels, one_qubit_gate, initial_state)
+new_im, _ = IMBP.contract(equation, ims, kernels, one_qubit_gate, initial_state, 1e-20)
 for (i, ker) in enumerate(new_im.kernels)
     if i == 1
-        @assert size(ker) == (1, 4, 4, 108)
+        @assert size(ker) == (1, 4, 4, 16)
+    elseif i == 2
+        @assert size(ker) == (16, 4, 4, 108)
+    elseif i ==19
+        @assert size(ker) == (108, 4, 4, 16)
     elseif i == 20
-        @assert size(ker) == (108, 4, 4, 1)
+        @assert size(ker) == (16, 4, 4, 1)
     else
         @assert size(ker) == (108, 4, 4, 108)
     end

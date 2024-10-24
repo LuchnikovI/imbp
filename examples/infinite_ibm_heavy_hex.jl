@@ -1,20 +1,25 @@
 using LinearAlgebra
 using TensorOperations
 using Plots
+using CUDA
 include("../src/IMBP.jl")
 using .IMBP
 
-# mixing quantum channl
+# mixing quantum channel
 theta = 0.9
+CUDA_ON = false
+
 mixing_gate = exp((-im * theta / 2) * ComplexF64[0 1 ; 1 0])
+mixing_gate = CUDA_ON ? CuArray(mixing_gate) : mixing_gate
 mixing_channel = kron(mixing_gate, conj(mixing_gate))
 
 # interaction quantum channel 
 int_gate = diagm(exp.((pi * im / 4) * ComplexF64[1, -1, -1, 1]))
+int_gate = CUDA_ON ? CuArray(int_gate) : int_gate
 int_channel = kron(int_gate, conj(int_gate))
 
-
 initial_state = ComplexF64[1 0 ; 0 0]
+initial_state = CUDA_ON ? CuArray(initial_state) : initial_state
 
 lattice_cell = IMBP.LatticeCell([initial_state for _ in 1:5])
 for pos in 1:5
@@ -27,8 +32,9 @@ add_two_qubit_gate!(lattice_cell, 5, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 2, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 1, 5, int_channel)
 equations = get_equations(lattice_cell)
-ims = initialize_ims_by_perfect_dissipators(IM{Array{ComplexF64}}, lattice_cell, 20)
-info = iterate_equations!(equations, ims, 10, 100, 1e-13)
+ims = initialize_ims_by_perfect_dissipators(CUDA_ON ? IM{CuArray{ComplexF64}} : IM{Array{ComplexF64}}, lattice_cell, 20)
+info = iterate_equations!(equations, ims, 10, 100, 1e-10)
+Profile.print()
 dens_dyn = simulate_dynamics(
     2,
     equations,

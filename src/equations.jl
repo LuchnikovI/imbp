@@ -16,10 +16,15 @@ IMID(kernel_id::KernelID) = IMID(kernel_id.time_position, kernel_id.is_forward, 
 
 const Equation = Vector{ElementID}
 
-struct Equations{T<:Number}
+struct Equations{
+    N<:Number,
+    TQG<:AbstractArray{N, 4},
+    IS<:AbstractVector{N},
+    OQG<:AbstractMatrix{N},
+}
     self_consistency_eqs::Vector{Vector{Equation}}
     marginal_eqs::Vector{Equation}
-    kernels::Dict{KernelID, AbstractArray{T, 4}}
-    one_qubit_gates::Vector{AbstractMatrix{T}}
-    initial_states::Vector{AbstractVector{T}}
+    kernels::Dict{KernelID, TQG}
+    one_qubit_gates::Vector{OQG}
+    initial_states::Vector{IS}
 end
