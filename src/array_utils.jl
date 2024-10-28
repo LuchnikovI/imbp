@@ -122,8 +122,8 @@ function apply_to_position(dst::AbstractArray, m::AbstractMatrix, pos::Integer)
     permutedims(dot_result, ((i for i in 2:pos)..., 1, (i for i in (pos + 1):len)...))
 end
 
-function _hs_dim_from_dens_dim(dens_dim::Int64)
-    sqrt_state_dim = round(Int64, sqrt(dens_dim))
+function _hs_dim_from_dens_dim(dens_dim::Integer)
+    sqrt_state_dim = round(Int, sqrt(dens_dim))
     @assert sqrt_state_dim * sqrt_state_dim == dens_dim
     sqrt_state_dim
 end

@@ -11,7 +11,7 @@ mutable struct LatticeCell{
         IS<:AbstractVector{N},
         OQG<:AbstractMatrix{N},
     }
-    two_qubit_gates_seq::Vector{Tuple{Int64, Int64}}
+    two_qubit_gates_seq::Vector{Tuple{Int, Int}}
     two_qubit_gates::Dict{KernelID, TQG}
     initial_states::Vector{IS}
     one_qubit_gates::Vector{OQG}
@@ -28,7 +28,7 @@ mutable struct LatticeCell{
             check_density(dens)
             reshape(dens, (4,))
         end, initial_states)
-        new{ET, TQG, IS, OQG}(Tuple{Int64, Int64}[], Dict{KernelID, TQG}(), initial_states, one_qubit_gates)
+        new{ET, TQG, IS, OQG}(Tuple{Int, Int}[], Dict{KernelID, TQG}(), initial_states, one_qubit_gates)
     end
 end
 
@@ -122,7 +122,7 @@ end
 function initialize_ims_by_perfect_dissipators(
     ::Type{I},
     lattice_cell::LatticeCell,
-    time_steps_number::Int64,
+    time_steps_number::Int,
 ) where {I<:AbstractIM}
     ims = Dict{IMID, I}()
     for (time_position, (left_node, right_node)) in enumerate(lattice_cell.two_qubit_gates_seq)
@@ -180,7 +180,7 @@ function iterate_equations!(
     infidelity::F = 1e-6,
 ) where {F<:AbstractFloat}
     information = InfoCell{F}[]
-    for iter_num in 1:convert(UInt64, max_iter)
+    for iter_num in 1:convert(UInt, max_iter)
         _single_iter!(eqs, ims, rank_or_eps, information)
         current_information = information[end]
         @info "Iteration" iter_num current_information

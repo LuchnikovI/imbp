@@ -12,12 +12,12 @@ module ConvergenceInfo
         mean_infidelity::F
         mean_sq_infidelity::F
         std_infidelity::F
-        statistics_size::UInt64
+        statistics_size::UInt
 
         InfoCell(::Type{F}) where {F<:AbstractFloat} = new{F}(zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), 0)
     end
-    update_mean(old_mean::F, new_val::F, stat_size::UInt64) where {F<:AbstractFloat} = (old_mean * stat_size + new_val) / (stat_size + 1)
-    update_mean_sq(old_mean_sq::F, new_val::F, stat_size::UInt64) where {F<:AbstractFloat} = (old_mean_sq * stat_size + new_val^2) / (stat_size + 1)
+    update_mean(old_mean::F, new_val::F, stat_size::UInt) where {F<:AbstractFloat} = (old_mean * stat_size + new_val) / (stat_size + 1)
+    update_mean_sq(old_mean_sq::F, new_val::F, stat_size::UInt) where {F<:AbstractFloat} = (old_mean_sq * stat_size + new_val^2) / (stat_size + 1)
     get_std(mean::F, mean_sq::F)  where {F<:AbstractFloat} = sqrt(abs(mean_sq - mean^2))
 
     function add_point!(info_cell::InfoCell{F}, truncation_error::F, infidelity::F) where {F<:AbstractFloat}

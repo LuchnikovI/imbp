@@ -133,7 +133,7 @@ end
 
 function _truncate_right_canonical!(
     im::IM{A},
-    rank_or_eps::Union{Int64, AbstractFloat},
+    rank_or_eps::Union{Int, AbstractFloat},
 ) where {T<:Number, A<:AbstractArray{T}}
     msg = A(undef, 1, 1)
     fill!(msg, one(T))
@@ -301,7 +301,7 @@ function log_fidelity(lhs::IM{<:AbstractArray{T}}, rhs::IM{<:AbstractArray{T}}) 
 end
 
 function get_bond_dimensions(im::IM)
-    bond_dims_vec = Int64[]
+    bond_dims_vec = Int[]
     push!(bond_dims_vec, size(im.kernels[1])[1])
     for ker in im.kernels
         push!(bond_dims_vec, size(ker)[4])
@@ -346,9 +346,9 @@ function _bwd_evolution(
     ker::AbstractArray,
 )
     ker_shape = size(ker)
-    sqrt_inp_tr_dim = round(Int64, sqrt(ker_shape[2]))
+    sqrt_inp_tr_dim = round(Int, sqrt(ker_shape[2]))
     @assert sqrt_inp_tr_dim * sqrt_inp_tr_dim == ker_shape[2]
-    sqrt_out_tr_dim = round(Int64, sqrt(ker_shape[3]))
+    sqrt_out_tr_dim = round(Int, sqrt(ker_shape[3]))
     @assert sqrt_out_tr_dim * sqrt_out_tr_dim == ker_shape[3]
     #resh_ker = reshape(
     #    ker,
@@ -389,7 +389,7 @@ end
 function _get_dens(lhs_state::AbstractArray, rhs_state::AbstractArray)
     dens = transpose(lhs_state) * rhs_state
     #@tensor dens[j] := lhs_state[i, j] * rhs_state[i]
-    sqrt_dim = round(Int64, sqrt(length(dens)))
+    sqrt_dim = round(Int, sqrt(length(dens)))
     @assert sqrt_dim * sqrt_dim == length(dens)
     dens = reshape(dens, (sqrt_dim, sqrt_dim))
     dens /= tr(dens)
