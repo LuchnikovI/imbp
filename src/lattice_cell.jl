@@ -1,6 +1,5 @@
 using Logging
 using LinearAlgebra
-using TensorOperations
 
 include("convergence_info.jl")
 

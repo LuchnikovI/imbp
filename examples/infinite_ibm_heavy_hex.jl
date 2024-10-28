@@ -1,9 +1,7 @@
 using LinearAlgebra
-using TensorOperations
 using Plots
 using CUDA
-include("../src/IMBP.jl")
-using .IMBP
+using IMBP
 
 # mixing quantum channel
 theta = 0.9
