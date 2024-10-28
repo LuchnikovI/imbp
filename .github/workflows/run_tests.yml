@@ -4,8 +4,11 @@ on:
   push:
     branches:
       - main
+      - master
   pull_request:
-    - main
+    branches:
+      - main
+      - master
 
 # needed to allow julia-actions/cache to delete old caches that it has created
 permissions:
