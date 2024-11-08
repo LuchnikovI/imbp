@@ -4,7 +4,7 @@ using CUDA
 using IMBP
 
 # mixing quantum channel
-theta = 0.9
+theta = 0.6
 CUDA_ON = false
 
 mixing_gate = exp((-im * theta / 2) * ComplexF64[0 1 ; 1 0])
@@ -30,9 +30,8 @@ add_two_qubit_gate!(lattice_cell, 5, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 2, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 1, 5, int_channel)
 equations = get_equations(lattice_cell)
-ims = initialize_ims_by_perfect_dissipators(CUDA_ON ? IM{CuArray{ComplexF64}} : IM{Array{ComplexF64}}, lattice_cell, 20)
-info = iterate_equations!(equations, ims, 10, 100, 1e-10)
-Profile.print()
+ims = initialize_ims_by_perfect_dissipators(CUDA_ON ? SketchyIM{CuArray{ComplexF64, 4}} : SketchyIM{Array{ComplexF64, 4}}, lattice_cell, 20)
+info = iterate_equations!(equations, ims, 25, 10, 1e-5)
 dens_dyn = simulate_dynamics(
     2,
     equations,

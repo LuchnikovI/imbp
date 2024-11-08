@@ -1,5 +1,3 @@
-using  ArrayInterface
-
 # only for small matrices
 function get_similar_identity(arr::AbstractArray, size::Integer)
     @assert size > 0
@@ -9,6 +7,18 @@ function get_similar_identity(arr::AbstractArray, size::Integer)
         for idx2 in 1:size
             val = idx1 == idx2 ? one(T) : zero(T)
             ArrayInterface.allowed_setindex!(m, val, idx1, idx2)
+        end
+    end
+    m
+end
+
+function get_id_matrix(::Type{A}, size::Integer) where {N, A<:AbstractArray{<:Number, N}}
+    @assert size > 0
+    @assert N > 0
+    m = reshape(A(undef, (size * size, (1 for _ in 1:(N-1))...)...), size, size)
+    for i in 1:size
+        for j in 1:size
+            ArrayInterface.allowed_setindex!(m, i == j ? one(N) : zero(N), i, j)
         end
     end
     m
@@ -55,7 +65,6 @@ function check_density(dens::AbstractArray)
     trace = tr(dens)
     un_unit_traceness = norm(trace - 1)
     inhermicity = norm(dens .- conj(transpose(dens)))
-    #TODO: fix density matrix checking
     evals = eigvals(dens)
     if un_unit_traceness > 1e-10
         @warn "Non-unit trace initial state" node_number inhermicity evals tr
@@ -85,45 +94,4 @@ function check_channel(node1::Integer, node2::Integer, channel::AbstractArray)
     if !all(x -> real(x) + 1e-10 > 0, evals)
         @warn "Negative eigenvalues of choi matrix" node1 node2 trace inhermicity evals
     end
-end
-
-function tensordot(t1::AbstractArray, t2::AbstractArray, axes_number::Integer)
-    shape1 = size(t1)
-    indices_num1 = length(shape1)
-    prefix1 = shape1[1:(indices_num1 - axes_number)]
-    suffix1 = shape1[(indices_num1 - axes_number + 1):indices_num1]
-    shape2 = size(t2)
-    indices_num2 = length(shape2)
-    prefix2 = shape2[1:axes_number]
-    suffix2 = shape2[(axes_number + 1):indices_num2]
-    @assert suffix1 == prefix2
-    new_shape = (prefix1..., suffix2...)
-    lhs = reshape(t1, prod(prefix1), prod(suffix1))
-    rhs = reshape(t2, prod(prefix2), prod(suffix2))
-    reshape(lhs * rhs, new_shape)
-end
-
-function tensordot(t1::AbstractArray, t2::AbstractArray, axes1::Tuple{Vararg{<:Integer}}, axes2::Tuple{Vararg{<:Integer}})
-    @assert length(axes1) == length(axes2)
-    new_order1 = (filter(x -> !(x in axes1), 1:length(size(t1)))..., axes1...)
-    new_order2 = (axes2..., filter(x -> !(x in axes2), 1:length(size(t2)))...)
-    tensordot(permutedims(t1, new_order1), permutedims(t2, new_order2), length(axes1))
-end
-
-function tensordot(t1::AbstractArray, t2::AbstractArray, axes1::Integer, axes2::Integer)
-    new_order1 = (filter(x -> x != axes1, 1:length(size(t1)))..., axes1)
-    new_order2 = (axes2, filter(x -> x != axes2, 1:length(size(t2)))...)
-    tensordot(permutedims(t1, new_order1), permutedims(t2, new_order2), 1)
-end
-
-function apply_to_position(dst::AbstractArray, m::AbstractMatrix, pos::Integer)
-    dot_result = tensordot(m, dst, 2, pos)
-    len = length(size(dot_result))
-    permutedims(dot_result, ((i for i in 2:pos)..., 1, (i for i in (pos + 1):len)...))
-end
-
-function _hs_dim_from_dens_dim(dens_dim::Integer)
-    sqrt_state_dim = round(Int, sqrt(dens_dim))
-    @assert sqrt_state_dim * sqrt_state_dim == dens_dim
-    sqrt_state_dim
 end

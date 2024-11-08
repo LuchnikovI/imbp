@@ -3,7 +3,6 @@ abstract type AbstractIM end
 # Abstract IM interface
 get_perfect_dissipator_im(
     ::Type{<:AbstractIM},
-    dispatch_arr::AbstractArray,
     time_steps_number::Integer,
 ) = error("Not Yet Implemented")
 
@@ -13,7 +12,7 @@ contract(
     kernels::Dict{KernelID, <:AbstractArray},
     one_qubit_gate::AbstractArray,
     initial_state::AbstractArray,
-    rank_or_eps::Union{Integer,AbstractFloat},
+    rank_or_eps::Union{Integer, AbstractFloat, Nothing};
 ) = error("Not Yet Implemented")
 
 log_fidelity(lhs::AbstractIM, rhs::AbstractIM) = error("Not Yet Implemented")

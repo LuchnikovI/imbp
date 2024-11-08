@@ -1,15 +1,12 @@
-using Logging
-using LinearAlgebra
-
 include("convergence_info.jl")
 
 using .ConvergenceInfo
 
 mutable struct LatticeCell{
         N<:Number,
-        TQG<:AbstractArray{N, 4},
-        IS<:AbstractVector{N},
-        OQG<:AbstractMatrix{N},
+        TQG<:Node{<:AbstractArray{N, 4}},
+        IS<:Node{<:AbstractVector{N}},
+        OQG<:Node{<:AbstractMatrix{N}},
     }
     two_qubit_gates_seq::Vector{Tuple{Int, Int}}
     two_qubit_gates::Dict{KernelID, TQG}
@@ -19,14 +16,14 @@ mutable struct LatticeCell{
     function LatticeCell(initial_states::Vector{<:AbstractMatrix{<:Number}})
         ET = eltype(first(initial_states))
         dispatch_arr = first(initial_states)
-        one_qubit_gates = AbstractArray[get_similar_identity(dispatch_arr, 4) for _ in 1:length(initial_states)]
+        one_qubit_gates = [similar_identity(dispatch_arr, 4, :out, :inp) for _ in 1:length(initial_states)]
         U = typeof(dispatch_arr)
-        IS = U.name.wrapper{ET, 1}
-        TQG = U.name.wrapper{ET, 4}
-        OQG = U.name.wrapper{ET, 2}
+        IS = Node{U.name.wrapper{ET, 1}}
+        TQG = Node{U.name.wrapper{ET, 4}}
+        OQG = Node{U.name.wrapper{ET, 2}}
         initial_states = map(dens -> begin
             check_density(dens)
-            reshape(dens, (4,))
+            Node(reshape(dens, (4,)), :pout)
         end, initial_states)
         new{ET, TQG, IS, OQG}(Tuple{Int, Int}[], Dict{KernelID, TQG}(), initial_states, one_qubit_gates)
     end
@@ -65,8 +62,20 @@ function add_two_qubit_gate!(
     gate = reshape(permutedims(reshape(gate, (2, 2, 2, 2, 2, 2, 2, 2)), (3, 1, 4, 2, 7, 5, 8, 6)), (4, 4, 4, 4))
     push!(lattice_cell.two_qubit_gates_seq, (node1, node2))
     ker_id = length(lattice_cell.two_qubit_gates_seq)
-    lattice_cell.two_qubit_gates[KernelID(ker_id, true, (node1, node2))] = permutedims(gate, (2, 1, 4, 3))
-    lattice_cell.two_qubit_gates[KernelID(ker_id, false, (node1, node2))] = gate
+    lattice_cell.two_qubit_gates[KernelID(ker_id, true, (node1, node2))] = Node(
+        gate,
+        :second_out,
+        :first_out,
+        :second_inp,
+        :first_inp,
+    )
+    lattice_cell.two_qubit_gates[KernelID(ker_id, false, (node1, node2))] = Node(
+        gate,
+        :first_out,
+        :second_out,
+        :first_inp,
+        :second_inp,
+    )
 end
 
 function add_one_qubit_gate!(
@@ -84,7 +93,7 @@ function add_one_qubit_gate!(
         error("Gate shape must be equal to (4, 4), but got an array of shape $gate_shape")
     end
     gate = reshape(permutedims(reshape(gate, (2, 2, 2, 2)), (2, 1, 4, 3)), (4, 4))
-    lattice_cell.one_qubit_gates[node] = gate
+    lattice_cell.one_qubit_gates[node] = Node(gate, :pout, :pinp)
 end
 
 function get_equations(lattice_cell::LatticeCell)
@@ -127,7 +136,7 @@ function initialize_ims_by_perfect_dissipators(
     ims = Dict{IMID, I}()
     for (time_position, (left_node, right_node)) in enumerate(lattice_cell.two_qubit_gates_seq)
         forward_id = IMID(time_position, true, (left_node, right_node))
-        perf_diss = get_perfect_dissipator_im(I, first(lattice_cell.initial_states), time_steps_number)
+        perf_diss = get_perfect_dissipator_im(I, time_steps_number)
         ims[forward_id] = perf_diss
         backward_id = IMID(time_position, false, (left_node, right_node))
         ims[backward_id] = perf_diss
@@ -138,9 +147,9 @@ end
 function _single_equation_iter(
     equation::Equation,
     ims::Dict{IMID,<:AbstractIM},
-    kernels::Dict{KernelID,<:AbstractArray{<:Number, 4}},
-    one_qubit_gate::AbstractMatrix{<:Number},
-    initial_state::AbstractVector{<:Number},
+    kernels::Dict{KernelID,<:Node},
+    one_qubit_gate::Node,
+    initial_state::Node,
     rank_or_eps::Union{Integer,AbstractFloat},
 )
     kernel_ids = findall(id -> isa(id, KernelID), equation)

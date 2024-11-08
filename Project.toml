@@ -5,14 +5,18 @@ version = "0.1.0"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SimpleTN = "ef591588-0aac-4ca2-8b87-606b3b61c00a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 ArrayInterface = "7"
+IterTools = "1.10.0"
 LinearAlgebra = "1"
 Logging = "1"
 Random = "1"
+SimpleTN = "0.1.0"
 Test = "1"

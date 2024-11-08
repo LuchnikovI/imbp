@@ -18,9 +18,9 @@ const Equation = Vector{ElementID}
 
 struct Equations{
     N<:Number,
-    TQG<:AbstractArray{N, 4},
-    IS<:AbstractVector{N},
-    OQG<:AbstractMatrix{N},
+    TQG<:Node{<:AbstractArray{N, 4}},
+    IS<:Node{<:AbstractVector{N}},
+    OQG<:Node{<:AbstractMatrix{N}},
 }
     self_consistency_eqs::Vector{Vector{Equation}}
     marginal_eqs::Vector{Equation}

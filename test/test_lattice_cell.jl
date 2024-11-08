@@ -2,8 +2,9 @@
     rng = MersenneTwister(42)
     true_initial_states = [random_state(Float64, rng, 2) for _ in 1:6]
     gates = [let u = random_unitary(Float64, rng, 4); kron(u, conj(u)) end for _ in 1:6]
-    true_flipped_kernels = map(x -> reshape(permutedims(reshape(x, (2, 2, 2, 2, 2, 2, 2, 2)), (3, 1, 4, 2, 7, 5, 8, 6)), (4, 4, 4, 4)), gates)
-    true_kernels = map(x -> permutedims(x, (2, 1, 4, 3)), true_flipped_kernels)
+    true_kernels = map(x -> reshape(permutedims(reshape(x, (2, 2, 2, 2, 2, 2, 2, 2)), (3, 1, 4, 2, 7, 5, 8, 6)), (4, 4, 4, 4)), gates)
+    true_flipped_kernels = map(x -> Node(x, :first_out, :second_out, :first_inp, :second_inp), true_kernels)
+    true_kernels = map(x -> Node(x, :second_out, :first_out, :second_inp, :first_inp), true_kernels)
 
     lattice_cell = LatticeCell(true_initial_states)
     add_two_qubit_gate!(lattice_cell, 1, 2, gates[1])
@@ -105,7 +106,7 @@
     ]
 
     # kernels testing
-    @test kernels == Dict{IMBP.KernelID, Array{ComplexF64, 4}}(
+    @test kernels == Dict{IMBP.KernelID, Node{Array{ComplexF64, 4}}}(
         IMBP.KernelID(1, false, (1, 2)) => true_flipped_kernels[1],
         IMBP.KernelID(2, false, (4, 5)) => true_flipped_kernels[2],
         IMBP.KernelID(3, false, (3, 5)) => true_flipped_kernels[3],
@@ -121,5 +122,5 @@
     )
 
     # test initial state
-    @test initial_states == map(x -> reshape(x, 4), true_initial_states)
+    @test initial_states == map(x -> Node(reshape(x, 4), :pout), true_initial_states)
 end
