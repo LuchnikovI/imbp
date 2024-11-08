@@ -11,7 +11,6 @@ using LinearAlgebra
 using SimpleTN
 
 include("array_utils.jl")
-include("contraction_utils.jl")
 include("equations.jl")
 include("abstract_im.jl")
 include("lattice_cell.jl")
