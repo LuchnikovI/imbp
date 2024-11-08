@@ -28,7 +28,7 @@
 
     initial_state = Node(randn(rng, ComplexF64, 4), :pout)
 
-    new_im, _ = IMBP.contract(equation, ims, kernels, one_qubit_gate, initial_state, 50)
+    new_im, _ = IMBP.contract(equation, ims, kernels, one_qubit_gate, initial_state, 50; rng)
     for (i, ker) in enumerate(new_im.kernels)
         if i == 1
             @test size(get_array(ker, :binp, :pinp, :pout, :bout)) == (1, 4, 4, 16)

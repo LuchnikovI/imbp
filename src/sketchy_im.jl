@@ -69,8 +69,8 @@ function _build_sketches(
     kernels::Dict{KernelID, <:Node},
     one_qubit_gate::Node,
     rank::Integer,
+    rng,
 ) where {A<:AbstractArray}
-    rng = Random.default_rng()#MersenneTwister(1234)
     time_steps = get_time_steps_number(ims)
     axes = map(x -> x.time_position, filter(x -> isa(x, IMID), equation))
     new_im = _random_im(SketchyIM{A}, rng, rank, time_steps)
@@ -127,13 +127,14 @@ function contract(
     kernels::Dict{KernelID, <:Node},
     one_qubit_gate::Node,
     initial_state::Node,
-    rank_or_eps::Union{Integer, AbstractFloat, Nothing},
+    rank_or_eps::Union{Integer, AbstractFloat, Nothing};
+    kwargs...,
 ) where {A<:AbstractArray}
     if !isa(rank_or_eps, Integer)
         error("Only truncation by fixed rank is supported for this type of IM")
     end
     time_steps = get_time_steps_number(ims)
-    sketches = _build_sketches(equation, ims, kernels, one_qubit_gate, rank_or_eps)
+    sketches = _build_sketches(equation, ims, kernels, one_qubit_gate, rank_or_eps, kwargs[:rng])
     axes = map(x -> x.time_position, filter(x -> isa(x, IMID), equation))
     im_bonds = map(x -> (x, 1), axes)
     msg = split_axis(

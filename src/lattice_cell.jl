@@ -150,13 +150,14 @@ function _single_equation_iter(
     kernels::Dict{KernelID,<:Node},
     one_qubit_gate::Node,
     initial_state::Node,
-    rank_or_eps::Union{Integer,AbstractFloat},
+    rank_or_eps::Union{Integer,AbstractFloat};
+    kwargs...,
 )
     kernel_ids = findall(id -> isa(id, KernelID), equation)
     @assert(length(kernel_ids) == 1)
     kernel_id = equation[kernel_ids[1]]
     @assert(isa(kernel_id, KernelID))
-    new_im, trunc_err = contract(equation, ims, kernels, one_qubit_gate, initial_state, rank_or_eps)
+    new_im, trunc_err = contract(equation, ims, kernels, one_qubit_gate, initial_state, rank_or_eps; kwargs...)
     new_im, IMID(kernel_id), trunc_err
 end
 
@@ -164,12 +165,13 @@ function _single_iter!(
     eqs::Equations,
     ims::Dict{IMID,<:AbstractIM},
     rank_or_eps::Union{Integer,F},
-    information::Vector{<:InfoCell{F}},
+    information::Vector{<:InfoCell{F}};
+    kwargs...,
 ) where {F<:AbstractFloat}
     info_cell = InfoCell(F)
     for (node, node_eqs) in enumerate(eqs.self_consistency_eqs)
         for equation in node_eqs
-            (new_im, imid, trunc_err) = _single_equation_iter(equation, ims, eqs.kernels, eqs.one_qubit_gates[node], eqs.initial_states[node], rank_or_eps)
+            (new_im, imid, trunc_err) = _single_equation_iter(equation, ims, eqs.kernels, eqs.one_qubit_gates[node], eqs.initial_states[node], rank_or_eps; kwargs...)
             direction = imid.is_forward ? imid.nodes : (imid.nodes[2], imid.nodes[1])
             log_fid = log_fidelity(new_im, ims[imid])
             add_point!(info_cell, trunc_err, one(F) - exp(log_fid))
@@ -186,11 +188,12 @@ function iterate_equations!(
     ims::Dict{IMID, <:AbstractIM},
     rank_or_eps::Union{Integer, F},
     max_iter::Integer = 100,
-    infidelity::F = 1e-6,
+    infidelity::F = 1e-6;
+    kwargs...,
 ) where {F<:AbstractFloat}
     information = InfoCell{F}[]
     for iter_num in 1:convert(UInt, max_iter)
-        _single_iter!(eqs, ims, rank_or_eps, information)
+        _single_iter!(eqs, ims, rank_or_eps, information; kwargs...)
         current_information = information[end]
         @info "Iteration" iter_num current_information
         if current_information.max_infidelity < infidelity

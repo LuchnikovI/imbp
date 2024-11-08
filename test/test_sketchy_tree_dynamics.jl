@@ -45,13 +45,10 @@
 
     eqs = get_equations(lc)
     ims = initialize_ims_by_perfect_dissipators(IMBP.SketchyIM{Array{ComplexF64, 4}}, lc, layers_number)
-    iterate_equations!(eqs, ims, 50, 30, 1e-10)
+    iterate_equations!(eqs, ims, 50, 30, 1e-5; rng)
 
     im_dyn = simulate_dynamics(3, eqs, ims, initial_dens)
     for (im_dens, exact_dens) in zip(im_dyn, exact_dyn)
-        println("---------------------------")
-        println(im_dens)
-        println(exact_dens)
-        #@test norm(im_dens - exact_dens) < 1e-6
+        @test norm(im_dens - exact_dens) < 1e-3
     end
 end

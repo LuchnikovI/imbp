@@ -13,6 +13,7 @@ contract(
     one_qubit_gate::AbstractArray,
     initial_state::AbstractArray,
     rank_or_eps::Union{Integer, AbstractFloat, Nothing};
+    kwargs...,
 ) = error("Not Yet Implemented")
 
 log_fidelity(lhs::AbstractIM, rhs::AbstractIM) = error("Not Yet Implemented")

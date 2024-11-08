@@ -1,7 +1,10 @@
 using LinearAlgebra
+using Random
 using Plots
 using CUDA
 using IMBP
+
+rng = MersenneTwister(42)
 
 # mixing quantum channel
 theta = 0.6
@@ -30,8 +33,8 @@ add_two_qubit_gate!(lattice_cell, 5, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 2, 3, int_channel)
 add_two_qubit_gate!(lattice_cell, 1, 5, int_channel)
 equations = get_equations(lattice_cell)
-ims = initialize_ims_by_perfect_dissipators(CUDA_ON ? SketchyIM{CuArray{ComplexF64, 4}} : SketchyIM{Array{ComplexF64, 4}}, lattice_cell, 20)
-info = iterate_equations!(equations, ims, 25, 10, 1e-5)
+ims = initialize_ims_by_perfect_dissipators(CUDA_ON ? SketchyIM{CuArray{ComplexF64, 4}} : SketchyIM{Array{ComplexF64, 4}}, lattice_cell, 40)
+info = iterate_equations!(equations, ims, 25, 20, 1e-5; rng)
 dens_dyn = simulate_dynamics(
     2,
     equations,

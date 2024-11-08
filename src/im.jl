@@ -198,7 +198,8 @@ function contract(
     kernels::Dict{KernelID, <:Node},
     one_qubit_gate::Node,
     initial_state::Node,
-    rank_or_eps::Union{Integer, AbstractFloat},
+    rank_or_eps::Union{Integer, AbstractFloat};
+    kwargs...,
 ) where {A<:AbstractArray}
     time_steps = get_time_steps_number(ims)
     new_kernels = Node{A}[]
