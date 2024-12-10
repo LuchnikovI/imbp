@@ -95,3 +95,21 @@ function check_channel(node1::Integer, node2::Integer, channel::AbstractArray)
         @warn "Negative eigenvalues of choi matrix" node1 node2 trace inhermicity evals
     end
 end
+
+function trace_dist(lhs::A, rhs::A) where {A<:AbstractArray{<:Number, 2}}
+    fac = svd(lhs - rhs)
+    0.5 * sum(fac.S)
+end
+
+function random_unitary(::Type{A}, rng, size::Integer, out_id, inp_id) where {A<:AbstractArray}
+    m = randn(rng, eltype(A), size, size)
+    fac = qr(m)
+    q = typeof(m)(fac.Q)
+    Node(q, out_id, inp_id)
+end
+
+function random_pure_dens(::Type{A}, rng, size::Integer, lhs_id, rhs_id) where {A<:AbstractArray}
+    psi = randn(rng, eltype(A), size)
+    normalize!(psi)
+    Node(psi, lhs_id)[] * Node(conj(psi), rhs_id)[]
+end

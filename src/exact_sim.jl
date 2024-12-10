@@ -1,4 +1,4 @@
-module Utils
+module ExactSim
 
 export QSim, apply_two_qubit_gate!, apply_one_qubit_gate!, get_one_qubit_dens, random_unitary, random_state
 

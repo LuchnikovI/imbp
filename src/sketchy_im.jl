@@ -24,38 +24,109 @@ function _random_im(
     SketchyIM(kernels)
 end
 
-function get_perfect_dissipator_im(
+#function get_perfect_dissipator_im(
+#    ::Type{SketchyIM{A}},
+#    time_steps_number::Integer,
+#) where {A<:AbstractArray}
+#    SketchyIM(Node{A}[perfect_dissipator_kernel(A) for _ in 1:time_steps_number])
+#end
+
+function initialize_im(
     ::Type{SketchyIM{A}},
-    time_steps_number::Integer,
 ) where {A<:AbstractArray}
-    SketchyIM(Node{A}[perfect_dissipator_kernel(A) for _ in 1:time_steps_number])
+    SketchyIM(Node{A}[])
+end
+
+function unitary_to_channel(u::Node)
+    u_conj = conj.(u)
+    change_id!(u_conj, :pinp, :pinp_conj)
+    change_id!(u_conj, :pout, :pout_conj)
+    phi = u[] * u_conj[]
+    merge_axes(merge_axes(phi, :pinp, :pinp, :pinp_conj), :pout, :pout, :pout_conj)
+end
+
+function single_im_backward_dynamics(im::SketchyIM{A}) where {A<:AbstractArray}
+    rhs_state = merge_axes(identity_from_array_type(A, 1, :bra, :ket), :binp, :bra, :ket)
+    trace_out = merge_axes(identity_from_array_type(A, 2, :bra, :ket), :tr, :bra, :ket)
+    rhs_states = []
+    push!(rhs_states, rhs_state)
+    for ker in im.kernels[length(im.kernels):-1:2]
+        ker = ker[:pinp] * trace_out[:tr]
+        ker = ker[:pout] * trace_out[:tr]
+        rhs_state = ker[:bout] * rhs_state[:binp]
+        push!(rhs_states, rhs_state)
+    end
+    reverse(rhs_states)
+end
+
+function single_im_dynamics(im::SketchyIM{A}, initial_state::Node, gates::Vector{<:Node}) where {A<:AbstractArray}
+    lhs_state = split_axis(merge_axes(initial_state, :out, :bra, :ket), :out, (:bout, 1), (:pout, 4))
+    rhs_states = single_im_backward_dynamics(im)
+    dynamics = []
+    for (ker, gate, rhs_state) in zip(im.kernels, gates, rhs_states)
+        lhs_state = lhs_state[:pout, :bout] * ker[:pinp, :binp]
+        lhs_state = lhs_state[:pout] * unitary_to_channel(gate)[:pinp]
+        dens = lhs_state[:bout] * rhs_state[:binp]
+        dens = split_axis(dens, :pout, (:bra, 2), (:ket, 2))
+        dens = dens ./ tr(get_array(dens, :bra, :ket))
+        push!(dynamics, dens)
+    end
+    dynamics
+end
+
+function dens_distance(lhs::Node, rhs::Node)
+    lhs_arr = get_array(lhs, :bra, :ket)
+    rhs_arr = get_array(rhs, :bra, :ket)
+    trace_dist(lhs_arr, rhs_arr)
+end
+
+function prediction_distance(lhs::SketchyIM{A}, rhs::SketchyIM{A}, rng, sample_size::Integer) where {A<:AbstractArray}
+    dist = zero(eltype(A))
+    time_steps = get_time_steps_number(lhs)
+    for _ in 1:sample_size
+        dens = random_pure_dens(A, rng, 2, :bra, :ket)
+        gates = [random_unitary(A, rng, 2, :pout, :pinp) for _ in 1:time_steps]
+        lhs_dynamics = single_im_dynamics(lhs, dens, gates)
+        rhs_dynamics = single_im_dynamics(rhs, dens, gates)
+        for (lhs_dens, rhs_dens) in zip(lhs_dynamics, rhs_dynamics)
+            dist += dens_distance(lhs_dens, rhs_dens)
+        end
+    end
+    dist / (sample_size * time_steps)
 end
 
 function _bwd_contraction(
     state::Node,
     equation::Equation,
     time_step::Integer,
-    ims::Dict{IMID, <:SketchyIM},
-    kernels::Dict{KernelID, <:Node},
-    one_qubit_gate::Node,
+    ims::Dict{IMID, SketchyIM{A}},
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+    one_qubit_gates::Vector{<:Node},
     sketch_im::SketchyIM,
-)
+) where {A<:AbstractArray}
+    is_kernel_passed = false
     for id in reverse(equation)
         if isa(id, IMID)
-            ker = ims[id].kernels[time_step]
+            ker = if length(ims[id].kernels) < time_step
+                @assert !is_kernel_passed
+                perfect_dissipator_kernel(A)
+            else
+                ims[id].kernels[time_step]
+            end
             state = ker[:pout, :bout] * state[:inp, id.time_position]
             change_id!(state, :binp, id.time_position)
             change_id!(state, :pinp, :inp)
         else
+            is_kernel_passed = true
             sketch_ker = sketch_im.kernels[time_step]
             state = sketch_ker[:bout] * state[:sketch_inp]
             change_id!(state, :binp, :sketch_inp)
-            ker = kernels[id]
+            ker = kernels[id][time_step]
             state = ker[:second_inp, :second_out, :first_out] * state[:pinp, :pout, :inp]
             change_id!(state, :first_inp, :inp)
         end
     end
-    state = one_qubit_gate[:pout] * state[:inp]
+    state = one_qubit_gates[time_step][:pout] * state[:inp]
     change_id!(state, :pinp, :inp)
     n = norm(state)
     state ./ n
@@ -66,14 +137,14 @@ end
 function _build_sketches(
     equation::Equation,
     ims::Dict{IMID, SketchyIM{A}},
-    kernels::Dict{KernelID, <:Node},
-    one_qubit_gate::Node,
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+    one_qubit_gates::Vector{<:Node},
     rank::Integer,
+    iter_num::Int,
     rng,
 ) where {A<:AbstractArray}
-    time_steps = get_time_steps_number(ims)
     axes = map(x -> x.time_position, filter(x -> isa(x, IMID), equation))
-    new_im = _random_im(SketchyIM{A}, rng, rank, time_steps)
+    new_im = _random_im(SketchyIM{A}, rng, rank, iter_num)
     rhs_states = []
     rhs_state = split_axis(
         merge_axes(identity_from_array_type(A, 2, :bra, :ket), :out, :bra, :ket),
@@ -83,9 +154,9 @@ function _build_sketches(
         map(x -> (x, 1), axes)...,
     )
     push!(rhs_states, rhs_state)
-    for ts in time_steps:-1:2
+    for ts in iter_num:-1:2
         rhs_state = _bwd_contraction(
-            rhs_state, equation, ts, ims, kernels, one_qubit_gate, new_im,
+            rhs_state, equation, ts, ims, kernels, one_qubit_gates, new_im,
         )
         push!(rhs_states, rhs_state)
     end
@@ -98,20 +169,27 @@ function _apply_msg(
     msg::Node,
     equation,
     time_step::Integer,
-    one_qubit_gate::Node,
-    ims::Dict{IMID, <:SketchyIM},
-    kernels::Dict{KernelID, <:Node},
-)
-    msg = one_qubit_gate[:pinp] * msg[:out]
+    one_qubit_gates::Vector{<:Node},
+    ims::Dict{IMID, SketchyIM{A}},
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+) where {A<:AbstractArray}
+    is_kernel_passed = false
+    msg = one_qubit_gates[time_step][:pinp] * msg[:out]
     change_id!(msg, :pout, :out)
     for id in equation
         if isa(id, IMID)
-            ker = ims[id].kernels[time_step]
+            ker = if length(ims[id].kernels) < time_step
+                @assert is_kernel_passed
+                perfect_dissipator_kernel(A)
+            else
+                ims[id].kernels[time_step]
+            end
             msg = msg[:out, id.time_position] * ker[:pinp, :binp]
             change_id!(msg, :bout, id.time_position)
             change_id!(msg, :pout, :out)
         else
-            ker = kernels[id]
+            is_kernel_passed = true
+            ker = kernels[id][time_step]
             msg = msg[:out] * ker[:first_inp]
             change_id!(msg, :first_out, :out)
         end
@@ -124,17 +202,18 @@ end
 function contract(
     equation::Equation,
     ims::Dict{IMID, SketchyIM{A}},
-    kernels::Dict{KernelID, <:Node},
-    one_qubit_gate::Node,
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+    one_qubit_gates::Vector{<:Node},
     initial_state::Node,
-    rank_or_eps::Union{Integer, AbstractFloat, Nothing};
+    rank_or_eps::Union{Integer, AbstractFloat, Nothing},
+    iter_num::Int;
     kwargs...,
 ) where {A<:AbstractArray}
     if !isa(rank_or_eps, Integer)
         error("Only truncation by fixed rank is supported for this type of IM")
     end
-    time_steps = get_time_steps_number(ims)
-    sketches = _build_sketches(equation, ims, kernels, one_qubit_gate, rank_or_eps, kwargs[:rng])
+    rng = get_or_default(kwargs, :rng, Random.default_rng())
+    sketches = _build_sketches(equation, ims, kernels, one_qubit_gates, rank_or_eps, iter_num, rng)
     axes = map(x -> x.time_position, filter(x -> isa(x, IMID), equation))
     im_bonds = map(x -> (x, 1), axes)
     msg = split_axis(
@@ -145,18 +224,18 @@ function contract(
         im_bonds...,
     )
     new_kernels = Node{A}[]
-    for ts in 1:time_steps
+    for ts in 1:iter_num
         msg_ker = _apply_msg(
             msg,
             equation,
             ts,
-            one_qubit_gate,
+            one_qubit_gates,
             ims,
             kernels,
         )
         new_ker, _ = qr((msg_ker[:out, axes...] * sketches[ts][:inp, axes...])[:sketch_inp], :bout)
         push!(new_kernels, new_ker)
-        if ts != time_steps
+        if ts != iter_num
             conj_new_ker = conj.(new_ker)
             msg = conj_new_ker[:binp, :pinp, :pout] * msg_ker[:binp, :pinp, :pout]
             change_id!(msg, :bout, :binp)
@@ -165,18 +244,12 @@ function contract(
     SketchyIM(new_kernels), nothing
 end
 
-function log_fidelity(lhs::SketchyIM{A}, rhs::SketchyIM{A}) where {T<:Number, A<:AbstractArray{T}}
-    msg = identity_from_array_type(A, 1, :bra, :ket)
-    log_fid = zero(T)
-    for (ker_lhs, ker_rhs) in zip(lhs.kernels, rhs.kernels)
-        ker_rhs = conj.(ker_rhs)
-        aux = msg[:bra] * ker_lhs[:binp]
-        change_id!(aux, :bout, :bra)
-        msg = aux[:ket, :pinp, :pout] * ker_rhs[:binp, :pinp, :pout]
-        change_id!(msg, :bout, :ket)
-        log_fid += _log_norm!(msg)
-    end
-    2 * real(log_fid)
+function im_distance(lhs::SketchyIM{A}, rhs::SketchyIM{A}; kwargs...) where {T<:Number, A<:AbstractArray{T}}
+    rng = get_or_default(kwargs, :rng, Random.default_rng())
+    sample_size = get_or_default(kwargs, :sample_size, 10)
+    dist = prediction_distance(lhs, rhs, rng, sample_size)
+    @assert abs(imag(dist)) < 1e-12
+    real(dist)
 end
 
 function get_bond_dimensions(im::SketchyIM)
@@ -194,10 +267,10 @@ function _fwd_evolution(
     state::Node,
     equation::Equation,
     time_step::Integer,
-    one_qubit_gate::Node,
+    one_qubit_gates::Vector{<:Node},
     ims::Dict{IMID, <:SketchyIM},
 )
-    state = one_qubit_gate[:pinp] * state[:pout]
+    state = one_qubit_gates[time_step][:pinp] * state[:pout]
     for (i, id) in enumerate(equation)
         @assert isa(id, IMID)
         ker = ims[id].kernels[time_step]
@@ -231,11 +304,10 @@ function simulate_dynamics(
     node_id::Integer,
     equations::Equations,
     ims::Dict{IMID, SketchyIM{A}},
-    initial_state::AbstractArray,
+    initial_state::Union{AbstractArray, Nothing} = nothing,
 ) where {T<:Number, A<:AbstractArray{T}}
-    initial_state = Node(reshape(initial_state, :), :pout) 
+    initial_state = isnothing(initial_state) ? equations.initial_states[node_id] : Node(reshape(initial_state, :), :pout)  
     equation = equations.marginal_eqs[node_id]
-    one_qubit_gate = equations.one_qubit_gates[node_id]
     eqs_num = length(equation)
     axes = 1:eqs_num
     time_steps = get_time_steps_number(ims)
@@ -258,14 +330,16 @@ function simulate_dynamics(
     )
     dynamics = AbstractArray{T}[]
     for (time_step, rhs_state) in enumerate(rhs_states)
-        push!(dynamics, _get_dens(lhs_state, rhs_state))
-        lhs_state = _fwd_evolution(lhs_state, equation, time_step, one_qubit_gate, ims)
+        dens = _get_dens(lhs_state, rhs_state)
+        push!(dynamics, dens)
+        lhs_state = _fwd_evolution(lhs_state, equation, time_step, equations.one_qubit_gates[node_id], ims)
     end
     rhs_state = split_axis(
         merge_axes(identity_from_array_type(A, 1, :bra, :ket), :out, :bra, :ket),
         :out,
         map(x -> (x, 1), axes)...,
     )
-    push!(dynamics, _get_dens(lhs_state, rhs_state))
+    dens = _get_dens(lhs_state, rhs_state)
+    push!(dynamics, dens)
     dynamics
 end

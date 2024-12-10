@@ -7,11 +7,11 @@ module ConvergenceInfo
         mean_truncation_error::Union{F, Nothing}
         mean_sq_truncation_error::Union{F, Nothing}
         std_truncation_error::Union{F, Nothing}
-        max_infidelity::F
-        min_infidelity::F
-        mean_infidelity::F
-        mean_sq_infidelity::F
-        std_infidelity::F
+        max_discrepancy::F
+        min_discrepancy::F
+        mean_discrepancy::F
+        mean_sq_discrepancy::F
+        std_discrepancy::F
         statistics_size::UInt
 
         InfoCell(::Type{F}) where {F<:AbstractFloat} = new{F}(zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), zero(F), 0)
@@ -34,11 +34,11 @@ module ConvergenceInfo
             info_cell.mean_sq_truncation_error = update_mean_sq(info_cell.mean_sq_truncation_error, truncation_error, info_cell.statistics_size)
             info_cell.std_truncation_error = get_std(info_cell.mean_truncation_error, info_cell.mean_sq_truncation_error)
         end
-        info_cell.max_infidelity = max(infidelity, info_cell.max_infidelity)
-        info_cell.min_infidelity = min(infidelity, info_cell.min_infidelity)
-        info_cell.mean_infidelity = update_mean(info_cell.mean_infidelity, infidelity, info_cell.statistics_size)
-        info_cell.mean_sq_infidelity = update_mean_sq(info_cell.mean_sq_infidelity, infidelity, info_cell.statistics_size)
-        info_cell.std_infidelity = get_std(info_cell.mean_infidelity, info_cell.mean_sq_infidelity)
+        info_cell.max_discrepancy = max(infidelity, info_cell.max_discrepancy)
+        info_cell.min_discrepancy = min(infidelity, info_cell.min_discrepancy)
+        info_cell.mean_discrepancy = update_mean(info_cell.mean_discrepancy, infidelity, info_cell.statistics_size)
+        info_cell.mean_sq_discrepancy = update_mean_sq(info_cell.mean_sq_discrepancy, infidelity, info_cell.statistics_size)
+        info_cell.std_discrepancy = get_std(info_cell.mean_discrepancy, info_cell.mean_sq_discrepancy)
         info_cell.statistics_size += 1
     end
 
@@ -53,14 +53,14 @@ module ConvergenceInfo
             info_cell.mean_truncation_error, '\n',
             "truncation error standart deviation: ",
             info_cell.std_truncation_error, '\n',
-            "maximal infidelity: ",
-            info_cell.max_infidelity, '\n',
-            "minimal infidelity: ",
-            info_cell.min_infidelity, '\n',
-            "mean infidelity: ",
-            info_cell.mean_infidelity, '\n',
-            "infidelity standart deviation: ",
-            info_cell.std_infidelity,
+            "maximal discrepancy: ",
+            info_cell.max_discrepancy, '\n',
+            "minimal discrepancy: ",
+            info_cell.min_discrepancy, '\n',
+            "mean discrepancy: ",
+            info_cell.mean_discrepancy, '\n',
+            "discrepancy standart deviation: ",
+            info_cell.std_discrepancy,
         )
     end
 end

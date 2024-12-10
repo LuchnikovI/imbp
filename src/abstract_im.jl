@@ -1,33 +1,32 @@
 abstract type AbstractIM end
 
 # Abstract IM interface
-get_perfect_dissipator_im(
+init_im(
     ::Type{<:AbstractIM},
-    time_steps_number::Integer,
 ) = error("Not Yet Implemented")
 
 contract(
     equation::Equation,
     ims::Dict{IMID, <:AbstractIM},
-    kernels::Dict{KernelID, <:AbstractArray},
-    one_qubit_gate::AbstractArray,
-    initial_state::AbstractArray,
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+    one_qubit_gate::Vector{<:Node},
+    initial_state::Node,
     rank_or_eps::Union{Integer, AbstractFloat, Nothing};
+    time_steps::Int,
     kwargs...,
 ) = error("Not Yet Implemented")
 
-log_fidelity(lhs::AbstractIM, rhs::AbstractIM) = error("Not Yet Implemented")
+im_distance(lhs::AbstractIM, rhs::AbstractIM; kwargs...) = error("Not Yet Implemented")
 
 get_bond_dimensions(im::AbstractIM) = error("Not Yet Implemented")
 
 get_time_steps_number(im::AbstractIM) = error("Not Yet Implemented")
 
 simulate_dynamics(
-    node_id::Int,
+    node_id::Integer,
     equations::Equations,
     ims::Dict{IMID, <:AbstractIM},
-    one_qubit_gate::AbstractArray,
-    initial_state::AbstractArray,
+    initial_state::Union{<:AbstractArray, Nothing},
 ) = error("Not Yet Implemented")
 
 # ----------------------------------------------------------------------------------------------------------------------

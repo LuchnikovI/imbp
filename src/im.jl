@@ -6,6 +6,9 @@ end
 
 function _check_dims_consistency(kernels::Vector{<:Node})
     kernels_number = length(kernels)
+    if kernels_number == 0
+        return
+    end
     first_ker_shape = shape(kernels[1])
     if first_ker_shape[:pinp] != first_ker_shape[:pout]
         error("Input and output dimensions of the kernel #1 in the IM are not equal")
@@ -135,23 +138,30 @@ function _random_im(
     IM(kernels)
 end
 
-function get_perfect_dissipator_im(
+#function get_perfect_dissipator_im(
+#    ::Type{IM{A}},
+#    time_steps_number::Integer,
+#) where {A<:AbstractArray}
+#    im = IM(Node{A}[perfect_dissipator_kernel(A) for _ in 1:time_steps_number])
+#    im
+#end
+
+function initialize_im(
     ::Type{IM{A}},
-    time_steps_number::Integer,
 ) where {A<:AbstractArray}
-    im = IM(Node{A}[perfect_dissipator_kernel(A) for _ in 1:time_steps_number])
-    im
+    IM(Node{A}[])
 end
 
 function _build_ith_kernel(
     equation::Equation,
-    one_qubit_gate::Node,
+    one_qubit_gates::Vector{<:Node},
     initial_state::Node,
     time_step::Integer,
+    im_length::Integer,
     ims::Dict{IMID, IM{A}},
-    kernels::Dict{KernelID, <:Node},
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
 ) where {A<:AbstractArray}
-    time_steps = get_time_steps_number(ims)
+    is_kernel_passed = false
     msg = if time_step > 1
         split_axis(
             split_axis(
@@ -163,15 +173,21 @@ function _build_ith_kernel(
     else
         split_axis(initial_state, :pout, (:binp_agr, 1), (:pinp, 1), (:new_pinp, 1), (:bout_agr, 1), (:pout, 4), (:new_pout, 1))
     end
-    msg = msg[:pout] * one_qubit_gate[:pinp]
+    msg = msg[:pout] * one_qubit_gates[time_step][:pinp]
     for elem in equation
         if isa(elem, IMID)
-            ker = ims[elem].kernels[time_step]
+            ker = if length(ims[elem].kernels) < time_step
+                @assert is_kernel_passed
+                perfect_dissipator_kernel(A)
+            else
+                ims[elem].kernels[time_step]
+            end
             msg = msg[:pout] * ker[:pinp]
             msg = merge_axes(msg, :bout_agr, :bout_agr, :bout)
             msg = merge_axes(msg, :binp_agr, :binp_agr, :binp)
         else
-            ker = kernels[elem]
+            is_kernel_passed = true
+            ker = kernels[elem][time_step]
             msg = msg[:pout] * ker[:first_inp]
             msg = merge_axes(msg, :new_pinp, :new_pinp, :second_inp)
             msg = merge_axes(msg, :new_pout, :new_pout, :second_out)
@@ -182,7 +198,7 @@ function _build_ith_kernel(
     msg = merge_axes(msg, :binp, :binp_agr, :pinp)
     change_id!(msg, :new_pinp, :pinp)
     change_id!(msg, :new_pout, :pout)
-    if time_step == time_steps
+    if time_step == im_length
         msg = split_axis(msg, :bout, (:bra, 2), (:ket, 2))
         tr = identity_from_array_type(A, 2, :bra, :ket)
         tr = split_axis(tr, :bra, (:bra, 2), (:bout, 1))
@@ -195,23 +211,23 @@ end
 function contract(
     equation::Equation,
     ims::Dict{IMID, IM{A}},
-    kernels::Dict{KernelID, <:Node},
-    one_qubit_gate::Node,
+    kernels::Dict{KernelID, Vector{N}} where {N<:Node},
+    one_qubit_gates::Vector{<:Node},
     initial_state::Node,
-    rank_or_eps::Union{Integer, AbstractFloat};
+    rank_or_eps::Union{Integer, AbstractFloat},
+    iter_num::Int;
     kwargs...,
 ) where {A<:AbstractArray}
-    time_steps = get_time_steps_number(ims)
     new_kernels = Node{A}[]
-    for i in 1:time_steps
-        push!(new_kernels, _build_ith_kernel(equation, one_qubit_gate, initial_state, i, ims, kernels))
+    for i in 1:iter_num
+        push!(new_kernels, _build_ith_kernel(equation, one_qubit_gates, initial_state, i, iter_num, ims, kernels))
     end
     new_im = IM(new_kernels)
     trunc_err = truncate!(new_im, rank_or_eps)
     new_im, trunc_err
 end
 
-function log_fidelity(lhs::IM{A}, rhs::IM{A}) where {T<:Number, A<:AbstractArray{T}}
+function im_distance(lhs::IM{A}, rhs::IM{A}) where {T<:Number, A<:AbstractArray{T}}
     msg = identity_from_array_type(A, 1, :bra, :ket)
     log_fid = zero(T)
     for (ker_lhs, ker_rhs) in zip(lhs.kernels, rhs.kernels)
@@ -222,7 +238,7 @@ function log_fidelity(lhs::IM{A}, rhs::IM{A}) where {T<:Number, A<:AbstractArray
         change_id!(msg, :bout, :ket)
         log_fid += _log_norm!(msg)
     end
-    2 * real(log_fid)
+    1 - exp(2 * real(log_fid))
 end
 
 function get_bond_dimensions(im::IM)
@@ -240,10 +256,10 @@ function _fwd_evolution(
     state::Node,
     equation::Equation,
     time_step::Integer,
-    one_qubit_gate::Node,
+    one_qubit_gates::Vector{<:Node},
     ims::Dict{IMID, <:IM},
 )
-    state = one_qubit_gate[:pinp] * state[:pout]
+    state = one_qubit_gates[time_step][:pinp] * state[:pout]
     for (i, id) in enumerate(equation)
         @assert isa(id, IMID)
         ker = ims[id].kernels[time_step]
@@ -282,6 +298,12 @@ function _get_dens(lhs_state::Node, rhs_state::Node)
     sqrt_dim = round(Int, sqrt(length(dens)))
     @assert sqrt_dim * sqrt_dim == length(dens)
     dens = reshape(dens, (sqrt_dim, sqrt_dim))
+    dens /= dens[1, 1]
+    dens = hermitianpart(dens)
+    fac = eigen(dens)
+    u = fac.vectors
+    lmbd = map(x -> max(x, zero(real(eltype(dens)))), fac.values)
+    dens = u * (reshape(lmbd, :, 1) .* transpose(conj(u)))
     dens /= tr(dens)
     dens
 end
@@ -290,11 +312,10 @@ function simulate_dynamics(
     node_id::Integer,
     equations::Equations,
     ims::Dict{IMID, IM{A}},
-    initial_state::AbstractArray,
+    initial_state::Union{Nothing, AbstractArray} = nothing,
 ) where {T<:Number, A<:AbstractArray{T}}
-    initial_state = Node(reshape(initial_state, :), :pout) 
+    initial_state = isnothing(initial_state) ? equations.initial_states[node_id] : Node(reshape(initial_state, :), :pout) 
     equation = equations.marginal_eqs[node_id]
-    one_qubit_gate = equations.one_qubit_gates[node_id]
     eqs_num = length(equation)
     axes = 1:eqs_num
     time_steps = get_time_steps_number(ims)
@@ -318,7 +339,7 @@ function simulate_dynamics(
     dynamics = AbstractArray{T}[]
     for (time_step, rhs_state) in enumerate(rhs_states)
         push!(dynamics, _get_dens(lhs_state, rhs_state))
-        lhs_state = _fwd_evolution(lhs_state, equation, time_step, one_qubit_gate, ims)
+        lhs_state = _fwd_evolution(lhs_state, equation, time_step, equations.one_qubit_gates[node_id], ims)
     end
     rhs_state = split_axis(
         merge_axes(identity_from_array_type(A, 1, :bra, :ket), :out, :bra, :ket),
